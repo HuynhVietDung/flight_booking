@@ -32,7 +32,7 @@ load_environment()
 @dataclass
 class LLMConfig:
     """LLM configuration settings."""
-    model: str = "gpt-3.5-turbo"
+    model: str = "gpt-4.1-mini"
     temperature: float = 0.0
     max_tokens: int = 1000
     api_key: str = None
@@ -101,7 +101,7 @@ class Settings:
     
     def __init__(self):
         self.llm = LLMConfig(
-            model=os.getenv("LLM_MODEL", "gpt-3.5-turbo"),
+            model=os.getenv("LLM_MODEL", "gpt-4.1-mini"),
             temperature=float(os.getenv("LLM_TEMPERATURE", "0")),
             max_tokens=int(os.getenv("LLM_MAX_TOKENS", "1000")),
             api_key=os.getenv("OPENAI_API_KEY"),
@@ -179,7 +179,7 @@ class Settings:
             template_content = """# Flight Booking Agent Environment Configuration
 
 # LLM Configuration
-LLM_MODEL=gpt-3.5-turbo
+LLM_MODEL=gpt-4.1-mini
 LLM_TEMPERATURE=0
 LLM_MAX_TOKENS=1000
 
@@ -214,7 +214,7 @@ ENV_EXAMPLES = """
 # Environment Variables (set these in your .env file)
 
 # LLM Configuration
-LLM_MODEL=gpt-3.5-turbo
+LLM_MODEL=gpt-4.1-mini
 LLM_TEMPERATURE=0
 LLM_MAX_TOKENS=1000
 

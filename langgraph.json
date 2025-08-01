@@ -1,0 +1,9 @@
+{
+  "name": "Flight Booking Agent",
+  "description": "A flight booking agent that can book flights for a user",
+  "graphs": {
+    "flight_booking_agent": "./src/agents/enhanced_agent.py:create_flight_booking_agent_graph"
+  },
+  "dependencies": ["."],
+  "env": ".env"
+}

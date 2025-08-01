@@ -32,10 +32,13 @@ class FlightBookingState(TypedDict):
     messages: Annotated[list[AnyMessage], add_messages]
     intent: str
     intent_confidence: float
+    reasoning: str
     booking_info: dict
     conversation_history: list[dict]
     final_response: str
     current_step: str
+    data: str
+    action: dict
 
 
 class FlightData(BaseModel):
