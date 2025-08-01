@@ -6,6 +6,7 @@ import random
 from typing import Dict, List, Any
 from langchain_core.tools import tool
 from ..config import settings
+from ..utils.cart_service import cart_service
 
 
 class FlightTools:
@@ -146,8 +147,8 @@ def search_flights(departure_city: str, arrival_city: str, date: str, passengers
 
 
 @tool
-def book_flight(flight_number: str, passenger_name: str, email: str, passengers: int = 1, class_type: str = "economy") -> str:
-    """Book a specific flight for a passenger."""
+def book_flight(flight_number: str, passenger_name: str, email: str, passengers: int = 1, class_type: str = "economy", user_id: str = None) -> str:
+    """Book a specific flight for a passenger and create order in cart."""
     tools = FlightTools()
     
     # Generate booking reference
@@ -170,6 +171,16 @@ def book_flight(flight_number: str, passenger_name: str, email: str, passengers:
     }
     
     tools.mock_bookings_db[booking_ref] = booking_data
+    
+    user_id = passenger_name + "123"
+    # Create order and add to cart if user_id is provided
+    order_info = ""
+    if user_id:
+        try:
+            order = cart_service.create_order_from_booking(user_id, booking_data)
+            order_info = f"\n📦 Order created and added to cart!\nOrder ID: {order.order_id}\nCart Total: ${cart_service.get_user_cart(user_id).get_total_amount():.2f}"
+        except Exception as e:
+            order_info = f"\n⚠️ Warning: Could not create order in cart: {str(e)}"
 
     return f"""✅ Flight booking confirmed!
 
@@ -179,7 +190,7 @@ Email: {email}
 Passengers: {passengers}
 Class: {class_type}
 Total Price: ${total_price:.2f}
-Booking Reference: {booking_ref}
+Booking Reference: {booking_ref} {order_info}
 
 Your booking confirmation has been sent to {email}."""
 
@@ -264,6 +275,69 @@ Refund Amount: ${booking['total_price']:.2f}
 A refund confirmation has been sent to {email}."""
 
 
+@tool
+def get_cart_summary(user_id: str) -> str:
+    """Get summary of user's shopping cart."""
+    summary = cart_service.get_cart_summary(user_id)
+    
+    if not summary["success"]:
+        return summary["message"]
+    
+    if summary["is_empty"]:
+        return f"🛒 Your cart is empty (Cart ID: {summary['cart_id']})"
+    
+    result = f"""🛒 Cart Summary (ID: {summary['cart_id']})
+Total Orders: {summary['order_count']}
+Total Amount: ${summary['total_amount']:.2f}
+
+Orders in Cart:"""
+    
+    for order in summary["orders"]:
+        result += f"""
+  • Order {order['order_id'][:8]}...
+    Flight: {order['flight_number']}
+    Passenger: {order['passenger_name']}
+    Amount: ${order['total_amount']:.2f}
+    Status: {order['order_status']} | Payment: {order['payment_status']}"""
+    
+    return result
+
+
+@tool
+def checkout_cart(user_id: str) -> str:
+    """Process checkout for user's shopping cart."""
+    checkout_result = cart_service.checkout_user_cart(user_id)
+    
+    if not checkout_result["success"]:
+        return checkout_result["message"]
+    
+    return f"""✅ Checkout completed successfully!
+
+Cart ID: {checkout_result['cart_id']}
+Total Orders: {checkout_result['order_count']}
+Total Amount: ${checkout_result['total_amount']:.2f}
+
+Order IDs: {', '.join(checkout_result['orders'])}
+
+Payment processing completed. All orders have been confirmed!"""
+
+
+@tool
+def remove_order_from_cart(user_id: str, order_id: str) -> str:
+    """Remove an order from user's shopping cart."""
+    success = cart_service.remove_order_from_cart(user_id, order_id)
+    
+    if success:
+        cart = cart_service.get_user_cart(user_id)
+        return f"""✅ Order removed from cart successfully!
+
+Order ID: {order_id}
+Remaining orders in cart: {cart.get_order_count()}
+Cart total: ${cart.get_total_amount():.2f}"""
+    else:
+        return f"❌ Failed to remove order {order_id} from cart. Order not found or cart is empty."
+
+
 # Export all tools
 flight_tools = [
     search_flights,
@@ -271,5 +345,8 @@ flight_tools = [
     get_weather,
     get_flight_status,
     get_booking_info,
-    cancel_booking
+    cancel_booking,
+    get_cart_summary,
+    checkout_cart,
+    remove_order_from_cart
 ] 

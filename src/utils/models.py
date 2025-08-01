@@ -7,6 +7,9 @@ from pydantic import BaseModel, Field
 from typing_extensions import TypedDict, Annotated
 from langchain_core.messages import AnyMessage
 from langgraph.graph.message import add_messages
+from datetime import datetime
+from enum import Enum
+import uuid
 
 
 class IntentClassification(BaseModel):
@@ -114,3 +117,126 @@ class ConversationHistory(BaseModel):
     def get_summary(self) -> str:
         """Get a summary of the conversation."""
         pass
+
+class OrderStatus(str, Enum):
+    """Enum for order status."""
+    PENDING = "pending"
+    CONFIRMED = "confirmed"
+    CANCELLED = "cancelled"
+    COMPLETED = "completed"
+
+
+class PaymentStatus(str, Enum):
+    """Enum for payment status."""
+    PENDING = "pending"
+    PAID = "paid"
+    FAILED = "failed"
+    REFUNDED = "refunded"
+
+
+class Order(BaseModel):
+    """Model for an order (đơn hàng)."""
+    order_id: str = Field(default_factory=lambda: str(uuid.uuid4()), description="Unique order ID")
+    user_id: str = Field(description="User ID who created the order")
+    flight_booking: BookingData = Field(description="Flight booking information")
+    order_status: OrderStatus = Field(default=OrderStatus.PENDING, description="Current order status")
+    payment_status: PaymentStatus = Field(default=PaymentStatus.PENDING, description="Payment status")
+    created_at: datetime = Field(default_factory=datetime.now, description="Order creation timestamp")
+    updated_at: datetime = Field(default_factory=datetime.now, description="Last update timestamp")
+    total_amount: float = Field(description="Total amount for this order")
+    currency: str = Field(default="USD", description="Currency for the order")
+    notes: Optional[str] = Field(default=None, description="Additional notes for the order")
+    
+    def update_status(self, new_status: OrderStatus):
+        """Update order status."""
+        self.order_status = new_status
+        self.updated_at = datetime.now()
+    
+    def update_payment_status(self, new_payment_status: PaymentStatus):
+        """Update payment status."""
+        self.payment_status = new_payment_status
+        self.updated_at = datetime.now()
+    
+    def is_paid(self) -> bool:
+        """Check if order is paid."""
+        return self.payment_status == PaymentStatus.PAID
+    
+    def is_confirmed(self) -> bool:
+        """Check if order is confirmed."""
+        return self.order_status == OrderStatus.CONFIRMED
+    
+    def can_cancel(self) -> bool:
+        """Check if order can be cancelled."""
+        return self.order_status in [OrderStatus.PENDING, OrderStatus.CONFIRMED]
+
+
+class Cart(BaseModel):
+    """Model for shopping cart (giỏ hàng)."""
+    cart_id: str = Field(default_factory=lambda: str(uuid.uuid4()), description="Unique cart ID")
+    user_id: str = Field(description="User ID who owns the cart")
+    orders: List[Order] = Field(default_factory=list, description="List of orders in the cart")
+    created_at: datetime = Field(default_factory=datetime.now, description="Cart creation timestamp")
+    updated_at: datetime = Field(default_factory=datetime.now, description="Last update timestamp")
+    is_active: bool = Field(default=True, description="Whether the cart is active")
+    
+    def add_order(self, order: Order):
+        """Add an order to the cart."""
+        self.orders.append(order)
+        self.updated_at = datetime.now()
+    
+    def remove_order(self, order_id: str) -> bool:
+        """Remove an order from the cart by order ID."""
+        for i, order in enumerate(self.orders):
+            if order.order_id == order_id:
+                self.orders.pop(i)
+                self.updated_at = datetime.now()
+                return True
+        return False
+    
+    def get_order(self, order_id: str) -> Optional[Order]:
+        """Get an order by order ID."""
+        for order in self.orders:
+            if order.order_id == order_id:
+                return order
+        return None
+    
+    def get_total_amount(self) -> float:
+        """Calculate total amount of all orders in the cart."""
+        return sum(order.total_amount for order in self.orders)
+    
+    def get_order_count(self) -> int:
+        """Get the number of orders in the cart."""
+        return len(self.orders)
+    
+    def is_empty(self) -> bool:
+        """Check if cart is empty."""
+        return len(self.orders) == 0
+    
+    def clear(self):
+        """Clear all orders from the cart."""
+        self.orders.clear()
+        self.updated_at = datetime.now()
+    
+    def get_pending_orders(self) -> List[Order]:
+        """Get all pending orders in the cart."""
+        return [order for order in self.orders if order.order_status == OrderStatus.PENDING]
+    
+    def get_confirmed_orders(self) -> List[Order]:
+        """Get all confirmed orders in the cart."""
+        return [order for order in self.orders if order.order_status == OrderStatus.CONFIRMED]
+    
+    def checkout(self) -> Dict[str, Any]:
+        """Process checkout for all orders in the cart."""
+        if self.is_empty():
+            return {"success": False, "message": "Cart is empty"}
+        
+        total_amount = self.get_total_amount()
+        order_count = self.get_order_count()
+
+        return {
+            "success": True,
+            "cart_id": self.cart_id,
+            "total_amount": total_amount,
+            "order_count": order_count,
+            "orders": [order.order_id for order in self.orders]
+        }
