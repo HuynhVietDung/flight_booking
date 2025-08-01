@@ -21,6 +21,8 @@ class BookingInformation(BaseModel):
     departure_city: Optional[str] = Field(description="Departure city", default=None)
     arrival_city: Optional[str] = Field(description="Arrival city", default=None)
     date: Optional[str] = Field(description="Travel date", default=None)
+    round_trip: Optional[bool] = Field(description="Is this a round trip? (true/false)", default=None)
+    return_date: Optional[str] = Field(description="Return date (required if round_trip is true)", default=None)
     passenger_name: Optional[str] = Field(description="Passenger name", default=None)
     email: Optional[str] = Field(description="Email address", default=None)
     passengers: Optional[int] = Field(description="Number of passengers", default=1)
@@ -30,12 +32,9 @@ class BookingInformation(BaseModel):
 class FlightBookingState(TypedDict):
     """State schema for the flight booking agent."""
     messages: Annotated[list[AnyMessage], add_messages]
-    intent: str
-    intent_confidence: float
-    reasoning: str
+    intent_classification: IntentClassification
     booking_info: dict
     conversation_history: list[dict]
-    final_response: str
     current_step: str
     data: str
     action: dict
@@ -111,3 +110,7 @@ class ConversationHistory(BaseModel):
     def get_turn_count(self) -> int:
         """Get the number of turns in the conversation."""
         return len(self.turns) 
+    
+    def get_summary(self) -> str:
+        """Get a summary of the conversation."""
+        pass

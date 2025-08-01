@@ -62,8 +62,8 @@ class BookingConfig:
         
         if self.required_fields is None:
             self.required_fields = {
-                "book_flight": ["departure_city", "arrival_city", "date", "passenger_name", "email"],
-                "search_flights": ["departure_city", "arrival_city", "date"],
+                "book_flight": ["departure_city", "arrival_city", "round_trip", "date", "passengers", "class_type", "passenger_name", "email"],
+                "search_flights": ["departure_city", "arrival_city", "round_trip", "date"],
                 "check_weather": ["city"],
                 "flight_status": ["flight_number"]
             }
@@ -72,12 +72,13 @@ class BookingConfig:
             self.field_names = {
                 "departure_city": "departure city",
                 "arrival_city": "destination city",
+                "round_trip": "round trip (yes/no)",
                 "date": "travel date",
+                "return_date": "return date (required if round_trip is true)",
                 "passenger_name": "passenger name",
                 "email": "email address",
                 "passengers": "number of passengers",
                 "class_type": "class type (economy, business, or first)",
-                "city": "city name",
                 "flight_number": "flight number"
             }
 

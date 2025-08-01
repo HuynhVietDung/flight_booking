@@ -202,3 +202,7 @@ logs/
 *.env
 .env.local
 .env.production 
+
+.langgraph_api/
+
+logs/

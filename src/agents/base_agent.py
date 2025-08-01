@@ -3,17 +3,17 @@ Base agent class for Flight Booking Agent
 """
 
 from abc import ABC, abstractmethod
-from typing import Dict, Any, List, Optional
+from typing import List, Optional
 from langchain_openai import ChatOpenAI
-from langchain_core.messages import HumanMessage, AIMessage
-from langgraph.graph import StateGraph, START, END
+from langchain_core.messages import HumanMessage
+from langgraph.graph import StateGraph
 
 from src.config import settings
-from src.utils import FlightBookingState, AgentResponse
+from src.utils import AgentResponse, IntentClassification
 from src.tools import flight_tools
 
 
-class BaseFlightAgent(ABC):
+class BaseAgent(ABC):
     """Base class for flight booking agents."""
     
     def __init__(self):
@@ -21,6 +21,11 @@ class BaseFlightAgent(ABC):
             model=settings.llm.model,
             temperature=settings.llm.temperature,
             max_tokens=settings.llm.max_tokens
+        )
+        self.processed_llm = ChatOpenAI(
+            model=settings.llm.model,
+            temperature=0.1,  
+            disable_streaming=True
         )
         self.tools = flight_tools
         self.graph = None
@@ -51,11 +56,11 @@ class BaseFlightAgent(ABC):
             result = compiled_graph.invoke(inputs)
             
             # Create response
+            intent_classification = result.get('intent_classification')
             response = AgentResponse(
                 success=True,
-                intent=result.get('intent', 'unknown'),
-                confidence=result.get('intent_confidence', 0.0),
-                response=result.get('final_response', ''),
+                intent=intent_classification.intent if intent_classification else 'unknown',
+                confidence=intent_classification.confidence if intent_classification else 0.0,
                 booking_info=result.get('booking_info', {})
             )
             
@@ -95,3 +100,4 @@ class BaseFlightAgent(ABC):
         """Postprocess agent response."""
         # Add any post-processing logic here
         return response 
+    

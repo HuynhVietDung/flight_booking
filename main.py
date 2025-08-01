@@ -10,7 +10,7 @@ from pathlib import Path
 src_path = Path(__file__).parent / "src"
 sys.path.insert(0, str(src_path))
 
-from src.agents import EnhancedFlightAgent
+from src.agents import FlightAgent
 from src.config import settings
 
 
@@ -36,7 +36,7 @@ def main():
     settings.print_config()
     
     # Create agent
-    agent = EnhancedFlightAgent()
+    agent = FlightAgent()
     
     print("🤖 Agent initialized successfully!")
     print("Type 'quit' to exit, 'help' for commands")

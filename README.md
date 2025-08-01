@@ -138,11 +138,9 @@ The agent uses a structured state with the following components:
 ```python
 class FlightBookingState(TypedDict):
     messages: Annotated[list[AnyMessage], add_messages]  # Conversation history
-    intent: str                                          # Classified intent
-    intent_confidence: float                             # Confidence score
+    intent_classification: IntentClassification           # Intent classification with confidence and reasoning
     booking_info: dict                                   # Collected booking information
     conversation_history: list[dict]                     # Additional conversation data
-    final_response: str                                  # Final agent response
     current_step: str                                    # Current processing step
 ```
 
@@ -167,10 +165,10 @@ START → Intent Classification → Route Based on Intent
 ### Basic Usage
 
 ```python
-from src.agents import EnhancedFlightAgent
+from src.agents import FlightAgent
 
 # Create agent
-agent = EnhancedFlightAgent()
+agent = FlightAgent()
 
 # Run agent
 response = agent.run("I want to book a flight from New York to London")
@@ -180,12 +178,12 @@ print(response.response)
 ### Advanced Usage
 
 ```python
-from src.agents import EnhancedFlightAgent
+from src.agents import FlightAgent
 from src.config import settings
 
 # Validate configuration
 if settings.validate():
-    agent = EnhancedFlightAgent()
+    agent = FlightAgent()
     
     # Process multiple requests
     requests = [
@@ -248,9 +246,9 @@ def your_custom_tool(param1: str, param2: int) -> str:
 ### Creating Custom Agents
 
 ```python
-from src.agents.base_agent import BaseFlightAgent
+from src.agents.base_agent import BaseAgent
 
-class CustomAgent(BaseFlightAgent):
+class CustomAgent(BaseAgent):
     def create_graph(self) -> StateGraph:
         # Your custom graph implementation
         pass

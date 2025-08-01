@@ -170,7 +170,7 @@ def book_flight(flight_number: str, passenger_name: str, email: str, passengers:
     }
     
     tools.mock_bookings_db[booking_ref] = booking_data
-    
+
     return f"""✅ Flight booking confirmed!
 
 Flight: {flight_number}
