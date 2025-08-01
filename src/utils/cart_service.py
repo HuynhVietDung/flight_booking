@@ -4,6 +4,7 @@ Cart and Order management service
 
 from typing import Dict, List, Optional
 from .models import Cart, Order, BookingData, OrderStatus, PaymentStatus
+from .payment_service import payment_service, PaymentMethod
 import uuid
 
 
@@ -20,8 +21,9 @@ class CartService:
             self.carts[user_id] = Cart(user_id=user_id)
         return self.carts[user_id]
     
-    def create_order_from_booking(self, user_id: str, booking_data: Dict[str, any]) -> Order:
-        """Create an order from booking data and add to user's cart."""
+    def create_order_from_booking(self, user_id: str, booking_data: Dict[str, any], 
+                                auto_payment: bool = True, payment_method: PaymentMethod = PaymentMethod.CREDIT_CARD) -> Dict[str, any]:
+        """Create an order from booking data, add to user's cart, and optionally process payment."""
         # Create BookingData object
         booking = BookingData(
             flight_number=booking_data["flight_number"],
@@ -52,7 +54,53 @@ class CartService:
         # Add order to cart
         cart.add_order(order)
         
-        return order
+        result = {
+            "order": order,
+            "cart": cart,
+            "payment_info": None
+        }
+        
+        # Process payment if auto_payment is enabled
+        if auto_payment:
+            try:
+                # Create payment transaction
+                transaction = payment_service.create_payment_transaction(order, payment_method)
+                
+                # Process payment
+                payment_result = payment_service.process_payment(transaction.transaction_id)
+                
+                if payment_result["success"]:
+                    # Update order status
+                    order.update_status(OrderStatus.CONFIRMED)
+                    order.update_payment_status(PaymentStatus.PAID)
+                    
+                    # Generate receipt
+                    receipt = payment_service.generate_payment_receipt(transaction)
+                    
+                    result["payment_info"] = {
+                        "success": True,
+                        "transaction_id": transaction.transaction_id,
+                        "amount": transaction.amount,
+                        "payment_method": payment_method.value,
+                        "receipt": receipt,
+                        "message": "Payment processed successfully"
+                    }
+                else:
+                    result["payment_info"] = {
+                        "success": False,
+                        "transaction_id": transaction.transaction_id,
+                        "error": payment_result.get("error_message", "Payment failed"),
+                        "message": "Payment processing failed"
+                    }
+                    
+            except Exception as e:
+                result["payment_info"] = {
+                    "success": False,
+                    "error": str(e),
+                    "message": "Payment processing error"
+                }
+        
+        return result
     
     def get_user_cart(self, user_id: str) -> Optional[Cart]:
         """Get cart for a specific user."""
@@ -89,13 +137,57 @@ class CartService:
             return cart.remove_order(order_id)
         return False
     
-    def checkout_user_cart(self, user_id: str) -> Dict[str, any]:
-        """Process checkout for user's cart."""
+    def checkout_user_cart(self, user_id: str, payment_method: PaymentMethod = PaymentMethod.CREDIT_CARD) -> Dict[str, any]:
+        """Process checkout for user's cart with payment processing."""
         cart = self.get_user_cart(user_id)
         if not cart:
             return {"success": False, "message": "No cart found for user"}
         
-        return cart.checkout()
+        if cart.is_empty():
+            return {"success": False, "message": "Cart is empty"}
+        
+        # Process payment for each order
+        payment_results = []
+        successful_orders = []
+        
+        for order in cart.orders:
+            # Create payment transaction
+            transaction = payment_service.create_payment_transaction(order, payment_method)
+            
+            # Process payment
+            payment_result = payment_service.process_payment(transaction.transaction_id)
+            
+            if payment_result["success"]:
+                # Update order status
+                order.update_status(OrderStatus.CONFIRMED)
+                order.update_payment_status(PaymentStatus.PAID)
+                successful_orders.append(order.order_id)
+                
+                # Generate receipt
+                receipt = payment_service.generate_payment_receipt(transaction)
+                payment_results.append({
+                    "order_id": order.order_id,
+                    "transaction_id": transaction.transaction_id,
+                    "amount": transaction.amount,
+                    "payment_method": payment_method.value,
+                    "receipt": receipt
+                })
+            else:
+                payment_results.append({
+                    "order_id": order.order_id,
+                    "transaction_id": transaction.transaction_id,
+                    "error": payment_result.get("error_message", "Payment failed")
+                })
+        
+        return {
+            "success": len(successful_orders) > 0,
+            "cart_id": cart.cart_id,
+            "total_orders": len(cart.orders),
+            "successful_payments": len(successful_orders),
+            "failed_payments": len(cart.orders) - len(successful_orders),
+            "payment_results": payment_results,
+            "successful_orders": successful_orders
+        }
     
     def get_cart_summary(self, user_id: str) -> Dict[str, any]:
         """Get summary of user's cart."""
