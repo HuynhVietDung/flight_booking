@@ -3,7 +3,7 @@ Enhanced Flight Booking Agent with advanced features
 """
 
 from typing import Literal
-from langchain_core.messages import AIMessage
+from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.output_parsers import JsonOutputParser
 from langgraph.graph import StateGraph, START, END
@@ -15,7 +15,9 @@ from src.utils import (
     IntentClassification, 
     BookingInformation
 )
+import logging
 
+logger = logging.getLogger(__name__)
 
 class EnhancedFlightAgent(BaseFlightAgent):
     """Enhanced flight booking agent with advanced features."""
@@ -27,9 +29,26 @@ class EnhancedFlightAgent(BaseFlightAgent):
     
     def classify_intent(self, state: FlightBookingState) -> FlightBookingState:
         """Enhanced intent classification with confidence scoring."""
+        messages = state.get("messages", [])
+        
+        # logger.info(f"Messages: {messages}")
+        recent_messages = []
+        for msg in messages[-10:]:
+            if isinstance(msg, HumanMessage):
+                recent_messages.append("User: " + msg.content[0]['text'])
+            elif isinstance(msg, AIMessage) and "Intent:" not in msg.content:
+                recent_messages.append("Assistant: " + msg.content)
+            else:
+                continue
+                
+        logger.info(f"Recent messages for intent classification: {recent_messages}")
+        
+        # Combine all recent messages for context
+        combined_text = " ".join(recent_messages) if recent_messages else ""
+        
         prompt = ChatPromptTemplate.from_messages([
             ("system", """You are an expert intent classifier for a flight booking system. 
-            Analyze the user's message and classify their intent with high accuracy.
+            Analyze the user's conversation history and classify their intent with high accuracy.
             
             Intent categories:
             - 'book_flight': User wants to book a flight (e.g., "I want to book", "book me a flight")
@@ -42,91 +61,144 @@ class EnhancedFlightAgent(BaseFlightAgent):
             - 'greeting': Simple greetings or casual conversation
             - 'provide_info': User is providing booking information in response to questions
             
-            Respond with a JSON object containing:
-            - intent: the classified intent
-            - confidence: confidence score between 0 and 1
-            - reasoning: brief explanation for the classification"""),
-            MessagesPlaceholder(variable_name="messages")
+            You MUST respond with ONLY a valid JSON object in this exact format:
+            {{
+                "intent": "the_classified_intent",
+                "confidence": float_number_between_0_and_1,
+                "reasoning": "Text summarizes the user's request and MUST have any booking details user explicitly provided"
+            }}
+            
+            Do not include any other text, explanations, or formatting outside the JSON object."""),
+            ("user", "Classify the intent from this conversation: {combined_text}")
         ])
         
         chain = prompt | self.llm | self.intent_parser
         
         try:
-            result = chain.invoke({"messages": state["messages"]})
+            result = chain.invoke({"combined_text": combined_text})
+            logger.info(f"Intent classification result: {result}")
             return {
-                "intent": result.intent,
-                "intent_confidence": result.confidence,
-                "messages": [AIMessage(content=f"Intent: {result.intent} (confidence: {result.confidence:.2f})")]
+                "intent": result["intent"],
+                "intent_confidence": result["confidence"],
+                "reasoning": result["reasoning"],
+                "messages": [AIMessage(content=f"Intent: {result['intent']} (confidence: {result['confidence']:.2f})")]
             }
         except Exception as e:
             # Fallback to simple classification
+            logger.error(f"Intent classification failed: {e}")
             return {
                 "intent": "general_inquiry",
                 "intent_confidence": 0.5,
+                "reasoning": "Intent classification failed, defaulting to general inquiry",
                 "messages": [AIMessage(content="Intent classification failed, defaulting to general inquiry")]
             }
     
     def collect_booking_info(self, state: FlightBookingState) -> FlightBookingState:
-        """Intelligently extract and request missing booking information."""
+        """Intelligently extract and request missing booking information based on intent reasoning."""
+        # logger.info(f"Collecting booking info for state: {state}")
         current_info = state.get("booking_info", {})
-        messages = state.get("messages", [])
-        
-        # Extract information from multiple messages (up to 10, or all if less than 10)
-        if messages:
-            # Get recent messages (up to 10, excluding intent messages)
-            recent_messages = []
-            for msg in messages[-10:]:  # Lấy 10 tin nhắn gần nhất
-                if hasattr(msg, 'content') and not msg.content.startswith("Intent:"):
-                    recent_messages.append(msg.content)
-            
-            if recent_messages:
-                # Combine all recent messages for extraction
-                combined_text = " ".join(recent_messages)
-                
-                extraction_prompt = ChatPromptTemplate.from_messages([
-                    ("system", """Extract booking information from the user's conversation history. 
-                    Look for departure city, arrival city, date, passenger name, email, number of passengers, and class type.
-                    Consider information from all messages in the conversation.
-                    Return a JSON object with the extracted information."""),
-                    ("user", f"Extract booking info from conversation: {combined_text}")
-                ])
-                
-                extraction_chain = extraction_prompt | self.llm | self.booking_parser
-                
-                try:
-                    extracted_info = extraction_chain.invoke({})
-                    # Merge extracted info with existing info
-                    for key, value in extracted_info.dict().items():
-                        if value is not None:
-                            current_info[key] = value
-                except Exception:
-                    pass  # Continue with existing info if extraction fails
-        
-        # Define required fields based on intent
+        missing_fields = [field for field in current_info if not current_info.get(field)]
         intent = state.get("intent", "")
-        required_fields = settings.booking.required_fields.get(intent, [])
+        user_intent_expansion = state.get("reasoning", "")
+        # logger.info(f"User intent expansion: {user_intent_expansion}")
+                
+        # Use LLM to extract booking information from user's latest message
+        extraction_prompt = ChatPromptTemplate.from_messages([
+            ("system", """You are an expert at extracting flight booking information. 
+            Extract any missing booking information mentioned in the user's intent expansion and update the current booking info.
+            
+            Current booking information: {current_info}
+            Missing fields: {missing_fields}
+            
+            You MUST respond with ONLY a valid JSON object in this exact format:
+            {{
+                "extracted_info": {{
+                    "field_name": "extracted_value",
+                    ...
+                }},
+                "updated_info": {{
+                    "field_name": "final_value",
+                    ...
+                }},
+                "user_intent_expansion": "<exactly the input user_intent_expansion text>"
+            }}
+            
+            Do not include any other text, explanations, or formatting outside the JSON object."""),
+            ("user", "Extract booking information from the user intent expansion. User intent expansion: {user_intent_expansion}")
+        ])
         
+        extraction_parser = JsonOutputParser()
+        extraction_chain = extraction_prompt | self.llm | extraction_parser
+        
+        try:
+            extraction_result = extraction_chain.invoke({
+                "current_info": current_info,
+                "missing_fields": missing_fields,
+                "user_intent_expansion": user_intent_expansion
+            })
+            
+            logger.info(f"Extraction result: {extraction_result}")
+            
+            # Update current_info with extracted information
+            if extraction_result.get("updated_info"):
+                current_info.update(extraction_result["updated_info"])
+                logger.info(f"Updated booking info: {current_info}")
+                
+        except Exception as e:
+            logger.error(f"Information extraction failed: {e}")
+        
+        # Now determine what information is still missing using simple logic
+        required_fields = settings.booking.required_fields.get(intent, [])
         missing_fields = [field for field in required_fields if not current_info.get(field)]
         
+        logger.info(f"Required fields for {intent}: {required_fields}")
+        logger.info(f"Missing fields: {missing_fields}")
+        
         if missing_fields:
-            # Generate a natural request for the FIRST missing field only
+            # Generate a natural question for the first missing field
             field_names = settings.booking.field_names
-            first_missing_field = missing_fields[0]  # Chỉ lấy field đầu tiên
+            first_missing_field = missing_fields[0]
             
-            prompt = f"Could you please provide the {field_names[first_missing_field]} for your flight?"
+            # Create natural questions based on context
+            question_templates = {
+                "departure_city": "Where will you be departing from?",
+                "arrival_city": "Where would you like to go?",
+                "date": "What date would you like to travel?",
+                "passenger_name": "What is the passenger's name?",
+                "email": "What email address should I use for the booking confirmation?",
+                "passengers": "How many passengers will be traveling?",
+                "class_type": "What class would you prefer? (economy, business, or first)"
+            }
             
-            # Return final response immediately when missing information
+            action_template = {
+                "departure_city": "show city list",
+                "arrival_city": "show city list",
+                "date": "show calendar",
+                "passenger_name": "show name input",
+                "email": "show email input",
+                "passengers": "show number input",
+                "class_type": "show class type list"
+            }
+            question = question_templates.get(first_missing_field, f"Could you please provide the {field_names.get(first_missing_field, first_missing_field)}?")
+            action = action_template.get(first_missing_field, "show text input")
+
             return {
                 "booking_info": current_info,
                 "current_step": "collecting_info",
-                "final_response": prompt,
-                "messages": [AIMessage(content=prompt)]
+                "final_response": question,
+                "action": {
+                    "field": first_missing_field,
+                    "action": action,
+                    "is_show": True
+                },
+                "messages": [AIMessage(content=question)]
             }
         else:
-            # All information collected - continue to process_booking
+            # All information collected
             return {
                 "booking_info": current_info,
                 "current_step": "info_complete",
+                "final_response": "Perfect! I have all the information I need to help you.",
                 "messages": [AIMessage(content="Perfect! I have all the information I need to help you.")]
             }
     
@@ -285,3 +357,9 @@ guide them through the process.""")
         workflow.add_edge("process_booking", END)
         
         return workflow 
+
+
+def create_flight_booking_agent_graph():
+    """Create the enhanced flight booking agent graph."""
+    agent = EnhancedFlightAgent()
+    return agent.create_graph().compile()

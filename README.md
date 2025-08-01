@@ -68,7 +68,7 @@ cat > .env << EOF
 # Flight Booking Agent Environment Configuration
 
 # LLM Configuration
-LLM_MODEL=gpt-3.5-turbo
+LLM_MODEL=gpt-4.1-mini
 LLM_TEMPERATURE=0
 LLM_MAX_TOKENS=1000
 
@@ -215,7 +215,7 @@ The agent can be configured using environment variables in the `.env` file:
 
 ```bash
 # LLM Configuration
-LLM_MODEL=gpt-3.5-turbo
+LLM_MODEL=gpt-4.1-mini
 LLM_TEMPERATURE=0
 LLM_MAX_TOKENS=1000
 
