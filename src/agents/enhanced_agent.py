@@ -7,6 +7,7 @@ from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.output_parsers import JsonOutputParser
 from langgraph.graph import StateGraph, START, END
+from langchain_core.runnables import RunnableConfig
 
 from src.agents.base_agent import BaseAgent
 from src.config import settings
@@ -225,7 +226,7 @@ class FlightAgent(BaseAgent):
                 "messages": [AIMessage(content="Perfect! I have all the information I need to help you.")]
             }
     
-    def process_booking(self, state: FlightBookingState) -> FlightBookingState:
+    def process_booking(self, state: FlightBookingState, config: RunnableConfig) -> FlightBookingState:
         """Enhanced main processing node with better tool handling and conversation flow."""
         intent_classification = state.get("intent_classification")
         intent = intent_classification.intent if intent_classification else ""
@@ -308,6 +309,8 @@ Use the cancel_booking tool to process the cancellation."""
         else:
             final_response = response.content
         
+
+        
         return {
             "current_step": "completed",
             "messages": [AIMessage(content=final_response)]
@@ -341,15 +344,12 @@ Use the cancel_booking tool to process the cancellation."""
         """Route after collect_info based on whether we have complete information."""
         current_step = state.get("current_step", "")
         
-        # If we're still collecting info, end the flow (user needs to provide more info)
         if current_step == "collecting_info":
             return "end"
         
-        # If info is complete, continue to process_booking
         if current_step == "info_complete":
             return "process_booking"
         
-        # Default to process_booking
         return "process_booking"
     
     def create_graph(self) -> StateGraph:
@@ -382,10 +382,10 @@ Use the cancel_booking tool to process the cancellation."""
         )
         workflow.add_edge("process_booking", END)
         
-        return workflow 
-
+        return workflow
+    
 
 def create_flight_booking_agent_graph():
     """Create the enhanced flight booking agent graph."""
     agent = FlightAgent()
-    return agent.create_graph().compile()
+    return agent.compile_graph(file_path="data/langgraph_checkpoints.db")

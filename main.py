@@ -42,6 +42,14 @@ def main():
     print("Type 'quit' to exit, 'help' for commands")
     print()
     
+    # Generate a unique thread_id for this session
+    import uuid
+    thread_id = str(uuid.uuid4())
+    user_id = "demo_user"  # In a real app, this would come from authentication
+    
+    print(f"📝 Chat session started - Thread ID: {thread_id[:8]}...")
+    print()
+    
     # Interactive loop
     while True:
         try:
@@ -56,6 +64,8 @@ def main():
                 print("  - help: Show this help")
                 print("  - tools: Show available tools")
                 print("  - config: Show current configuration")
+                print("  - history: Info about chat history (managed by LangGraph)")
+                print("  - summary: Info about session summary (managed by LangGraph)")
                 continue
             elif user_input.lower() == 'tools':
                 tools = agent.get_available_tools()
@@ -64,13 +74,23 @@ def main():
             elif user_input.lower() == 'config':
                 settings.print_config()
                 continue
+            elif user_input.lower() == 'history':
+                print("📚 Chat history is now managed by LangGraph checkpointer")
+                print("   Use LangGraph Studio or API to view conversation history")
+                print()
+                continue
+            elif user_input.lower() == 'summary':
+                print("📊 Session summary is now managed by LangGraph checkpointer")
+                print("   Use LangGraph Studio or API to view session details")
+                print()
+                continue
             elif not user_input:
                 continue
             
             print("🤖 Processing...")
             
-            # Run agent
-            response = agent.run(user_input)
+            # Run agent with thread_id and user_id
+            response = agent.run(user_input, thread_id=thread_id, user_id=user_id)
             
             if response.success:
                 print(f"🎯 Intent: {response.intent} (confidence: {response.confidence:.2f})")

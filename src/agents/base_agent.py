@@ -9,8 +9,11 @@ from langchain_core.messages import HumanMessage
 from langgraph.graph import StateGraph
 
 from src.config import settings
-from src.utils import AgentResponse, IntentClassification
+from src.utils import AgentResponse
 from src.tools import flight_tools
+import sqlite3
+from langgraph.checkpoint.sqlite import SqliteSaver
+from langgraph.checkpoint.memory import InMemorySaver
 
 
 class BaseAgent(ABC):
@@ -35,13 +38,24 @@ class BaseAgent(ABC):
         """Create the agent graph. Must be implemented by subclasses."""
         pass
     
-    def compile_graph(self) -> StateGraph:
-        """Compile the agent graph."""
+    def compile_graph(self, file_path: str = "data/langgraph_checkpoints.db") -> StateGraph:
+        """Compile the agent graph with SQLite checkpointer."""
         if self.graph is None:
             self.graph = self.create_graph()
-        return self.graph.compile()
+        
+        # Use built-in SQLite checkpointer
+        try:
+            # Create SQLite connection for checkpoints
+            conn = sqlite3.connect(file_path)
+            checkpointer = SqliteSaver(conn)
+            
+            return self.graph.compile(checkpointer=checkpointer)
+            
+        except ImportError:
+            checkpointer = InMemorySaver()
+            return self.graph.compile(checkpointer=checkpointer)
     
-    def run(self, user_input: str, thread_id: Optional[str] = None) -> AgentResponse:
+    def run(self, user_input: str, thread_id: Optional[str] = None, user_id: Optional[str] = None) -> AgentResponse:
         """Run the agent with user input."""
         try:
             # Compile graph if not already compiled
@@ -52,8 +66,21 @@ class BaseAgent(ABC):
                 "messages": [HumanMessage(content=user_input)]
             }
             
-            # Run the graph
-            result = compiled_graph.invoke(inputs)
+            # Prepare config with thread_id and user_id
+            config = {}
+            if thread_id or user_id:
+                config["configurable"] = {}
+                if thread_id:
+                    config["configurable"]["thread_id"] = thread_id
+                if user_id:
+                    config["configurable"]["user_id"] = user_id
+            
+            # Run the graph with config to ensure checkpointing
+            if config:
+                result = compiled_graph.invoke(inputs, config=config)
+            else:
+                # If no config, still run but without checkpointing
+                result = compiled_graph.invoke(inputs)
             
             # Create response
             intent_classification = result.get('intent_classification')
@@ -61,6 +88,7 @@ class BaseAgent(ABC):
                 success=True,
                 intent=intent_classification.intent if intent_classification else 'unknown',
                 confidence=intent_classification.confidence if intent_classification else 0.0,
+                response=result.get('messages', [{}])[-1].content if result.get('messages') else '',
                 booking_info=result.get('booking_info', {})
             )
             
@@ -85,12 +113,6 @@ class BaseAgent(ABC):
             if tool.name == tool_name:
                 return tool
         return None
-    
-    def validate_input(self, user_input: str) -> bool:
-        """Validate user input."""
-        if not user_input or not user_input.strip():
-            return False
-        return True
     
     def preprocess_input(self, user_input: str) -> str:
         """Preprocess user input."""
