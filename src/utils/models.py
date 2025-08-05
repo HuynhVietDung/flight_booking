@@ -17,6 +17,7 @@ class IntentClassification(BaseModel):
     intent: str = Field(description="The classified intent")
     confidence: float = Field(description="Confidence score between 0 and 1")
     reasoning: str = Field(description="Brief reasoning for the classification")
+    language: str = Field(description="Detected language of the user input (e.g., 'vi', 'en', 'zh', etc.)")
 
 
 class BookingInformation(BaseModel):
@@ -32,15 +33,49 @@ class BookingInformation(BaseModel):
     class_type: Optional[str] = Field(description="Class type (economy, business, first)", default="economy")
 
 
+class ConversationEntry(BaseModel):
+    """Model for a single conversation entry."""
+    timestamp: datetime = Field(default_factory=datetime.now, description="Timestamp of the conversation entry")
+    user_input: str = Field(description="User's input message")
+    thread_id: str = Field(description="Thread ID for the conversation")
+    user_id: str = Field(description="User ID")
+    session_id: str = Field(description="Session ID")
+    metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional metadata")
+
+
+class ConversationHistory(BaseModel):
+    """Model for conversation history storage."""
+    thread_id: str = Field(description="Thread ID for the conversation")
+    user_id: str = Field(description="User ID")
+    entries: List[ConversationEntry] = Field(default_factory=list, description="List of conversation entries")
+    created_at: datetime = Field(default_factory=datetime.now, description="Creation timestamp")
+    updated_at: datetime = Field(default_factory=datetime.now, description="Last update timestamp")
+    
+    def add_entry(self, entry: ConversationEntry):
+        """Add a new conversation entry."""
+        self.entries.append(entry)
+        self.updated_at = datetime.now()
+    
+    def get_recent_entries(self, limit: int = 10) -> List[ConversationEntry]:
+        """Get recent conversation entries."""
+        return self.entries[-limit:] if self.entries else []
+    
+    def get_entry_count(self) -> int:
+        """Get the number of conversation entries."""
+        return len(self.entries)
+
+
 class FlightBookingState(TypedDict):
     """State schema for the flight booking agent."""
     messages: Annotated[list[AnyMessage], add_messages]
     intent_classification: IntentClassification
     booking_info: dict
-    conversation_history: list[dict]
+    conversation_history: ConversationHistory
     current_step: str
     data: str
     action: dict
+    thread_id: str
+    user_id: str
 
 
 class FlightData(BaseModel):
@@ -82,6 +117,7 @@ class AgentResponse(BaseModel):
     intent: str
     confidence: float
     response: str
+    language: str = Field(default="en", description="Detected language of the user input")
     booking_info: Dict[str, Any] = {}
     error: Optional[str] = None
 
@@ -240,3 +276,59 @@ class Cart(BaseModel):
             "order_count": order_count,
             "orders": [order.order_id for order in self.orders]
         }
+
+
+class QuestionTemplates:
+    """Singleton class for managing multilingual question templates."""
+    
+    _instance = None
+    _initialized = False
+    
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super(QuestionTemplates, cls).__new__(cls)
+        return cls._instance
+    
+    def __init__(self):
+        if not self._initialized:
+            self._templates = {
+                "en": {
+                    "departure_city": "May I please know your departure city?",
+                    "arrival_city": "Could you kindly tell me your destination?",
+                    "date": "What date would you prefer for your journey?",
+                    "round_trip": "Would this be a round-trip journey? (yes/no)",
+                    "return_date": "When would you like to return?",
+                    "passenger_name": "May I have the passenger's full name, please?",
+                    "email": "Could you provide an email address for booking confirmation?",
+                    "passengers": "How many passengers will be traveling?",
+                    "class_type": "Which class of service would you prefer? (economy, business, or first class)"
+                },
+                "vi": {
+                    "departure_city": "Xin phép hỏi, quý khách sẽ khởi hành từ thành phố nào?",
+                    "arrival_city": "Quý khách có thể cho biết điểm đến là đâu không?",
+                    "date": "Quý khách muốn đi vào ngày nào?",
+                    "round_trip": "Đây có phải là chuyến bay khứ hồi không? (có/không)",
+                    "return_date": "Quý khách muốn về vào ngày nào?",
+                    "passenger_name": "Xin phép hỏi tên đầy đủ của hành khách?",
+                    "email": "Quý khách có thể cung cấp email để nhận xác nhận đặt vé không?",
+                    "passengers": "Dạ cho em hỏi có bao nhiêu hành khách sẽ đi?",
+                    "class_type": "Quý khách muốn hạng vé nào? (phổ thông, thương gia, hoặc hạng nhất)"
+                }
+            }
+            
+            self._completion_messages = {
+                "en": "Excellent! I have gathered all the necessary information to assist you with your booking.",
+                "vi": "Tuyệt vời! Tôi đã có đủ thông tin cần thiết để hỗ trợ quý khách đặt vé."
+            }
+            
+            self._fallback_language = "en"
+            self._initialized = True
+    
+    def get_question(self, field: str, language: str) -> str:
+        """Get question for a specific field and language."""
+        language_templates = self._templates.get(language, self._templates[self._fallback_language])
+        return language_templates.get(field, f"Could you please provide the {field}?")
+    
+    def get_completion_message(self, language: str) -> str:
+        """Get completion message for a specific language."""
+        return self._completion_messages.get(language, self._completion_messages[self._fallback_language])

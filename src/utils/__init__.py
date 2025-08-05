@@ -11,8 +11,11 @@ from .models import (
     WeatherData,
     AgentResponse,
     ConversationTurn,
-    ConversationHistory
+    ConversationHistory,
+    ConversationEntry
 )
+from .conversation_service import conversation_service
+from .database import db_manager
 
 __all__ = [
     "IntentClassification",
@@ -23,5 +26,8 @@ __all__ = [
     "WeatherData",
     "AgentResponse",
     "ConversationTurn",
-    "ConversationHistory"
+    "ConversationHistory",
+    "ConversationEntry",
+    "conversation_service",
+    "db_manager"
 ] 
