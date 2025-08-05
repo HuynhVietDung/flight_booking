@@ -17,7 +17,10 @@ from src.utils import (
     IntentClassification, 
     BookingInformation
 )
+from src.utils.conversation_service import conversation_service
 import logging
+from src.utils.models import QuestionTemplates
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
@@ -37,8 +40,70 @@ class FlightAgent(BaseAgent):
         super().__init__()
         self.intent_parser = JsonOutputParser(pydantic_object=IntentClassification)
         self.booking_parser = JsonOutputParser(pydantic_object=BookingInformation)
+    
+    def save_conversation(self, state: FlightBookingState, config: RunnableConfig = None) -> FlightBookingState:
+        """Save conversation entry to storage."""
+        try:
+            messages = state.get("messages", [])
             
-    def classify_intent(self, state: FlightBookingState) -> FlightBookingState:
+            # Lấy các giá trị từ RunnableConfig
+            thread_id = None
+            user_id = None
+            email = None
+            phone = None
+            session_id = None
+            
+            if config and "configurable" in config:
+                configurable = config["configurable"]
+                thread_id = configurable.get("thread_id")
+                user_id = configurable.get("user_id")
+                email = configurable.get("email")
+                phone = configurable.get("phone")
+                session_id = configurable.get("session_id")
+            
+            # Fallback nếu không có trong config
+            thread_id = thread_id or state.get("thread_id", "unknown")
+            user_id = user_id or state.get("user_id", "unknown")
+            
+            # Get the latest user message
+            user_input = ""
+            for msg in reversed(messages):
+                if isinstance(msg, HumanMessage):
+                    if isinstance(msg.content, list) and msg.content:
+                        user_input = msg.content[0]['text']
+                    elif isinstance(msg.content, str):
+                        user_input = msg.content
+                    break
+            
+            if user_input:
+                # Add conversation entry với metadata đầy đủ
+                success = conversation_service.add_conversation_entry(
+                    thread_id=thread_id,
+                    user_input=user_input,
+                    user_id=user_id,
+                    session_id=session_id,
+                    metadata={
+                        "email": email,
+                        "phone": phone,
+                        "message_count": len(messages),
+                        "timestamp": str(datetime.now()),
+                        "source": "langgraph_node"
+                    }
+                )
+                
+                if success:
+                    logger.info(f"Conversation entry saved for thread {thread_id} (user: {user_id})")
+                else:
+                    logger.warning(f"Failed to save conversation entry for thread {thread_id}")
+            
+            # Return state unchanged
+            return state
+            
+        except Exception as e:
+            logger.error(f"Error in save_conversation: {e}")
+            return state
+    
+    def classify_intent(self, state: FlightBookingState, config: RunnableConfig = None) -> FlightBookingState:
         """Enhanced intent classification with confidence scoring."""
         messages = state.get("messages", [])
         
@@ -77,7 +142,8 @@ class FlightAgent(BaseAgent):
             {{
                 "intent": "the_classified_intent",
                 "confidence": float_number_between_0_and_1,
-                "reasoning": "Text summarizes the user's request and MUST have all booking details user explicitly provided"
+                "reasoning": "Text summarizes the user's request and MUST have all booking details user explicitly provided",
+                "language": "Detected language of the user input, eg: vi, en"
             }}
             
             Do not include any other text, explanations, or formatting outside the JSON object."""),
@@ -93,7 +159,8 @@ class FlightAgent(BaseAgent):
                 "intent_classification": IntentClassification(
                     intent=result["intent"],
                     confidence=result["confidence"],
-                    reasoning=result["reasoning"]
+                    reasoning=result["reasoning"],
+                    language=result.get("language", "en")  # Default to English if not detected
                 ),
                 "messages": state["messages"]
             }
@@ -103,12 +170,13 @@ class FlightAgent(BaseAgent):
                 "intent_classification": IntentClassification(
                     intent="general_inquiry",
                     confidence=0.5,
-                    reasoning="Intent classification failed, defaulting to general inquiry"
+                    reasoning="Intent classification failed, defaulting to general inquiry",
+                    language="en"  # Default to English on error
                 ),
                 "messages": state["messages"]
             }
     
-    def collect_booking_info(self, state: FlightBookingState) -> FlightBookingState:
+    def collect_booking_info(self, state: FlightBookingState, config: RunnableConfig = None) -> FlightBookingState:
         """Intelligently extract and request missing booking information with streaming."""
         # logger.info(f"Collecting booking info for state: {state}")
 
@@ -184,6 +252,12 @@ class FlightAgent(BaseAgent):
         logger.info(f"Required fields for {intent}: {required_fields}")
         logger.info(f"Missing fields: {missing_fields}")
         
+        # Get detected language from intent classification
+        detected_language = intent_classification.language if intent_classification else "en"
+        
+        # Get question templates singleton
+        question_templates = QuestionTemplates()
+        
         if missing_fields:
             # Get stream writer
             writer = get_stream_writer()
@@ -192,19 +266,6 @@ class FlightAgent(BaseAgent):
             field_names = settings.booking.field_names
             first_missing_field = missing_fields[0]
             
-            # Create natural questions based on context
-            question_templates = {
-                "departure_city": "Where will you be departing from?",
-                "arrival_city": "Where would you like to go?",
-                "date": "What date would you like to travel?",
-                "round_trip": "Is this a round trip? (yes/no)",
-                "return_date": "What date would you like to return?",
-                "passenger_name": "What is the passenger's name?",
-                "email": "What email address should I use for the booking confirmation?",
-                "passengers": "How many passengers will be traveling?",
-                "class_type": "What class would you prefer? (economy, business, or first)"
-            }
-            
             action_template = {
                 "date": "date-picker",
                 "return_date": "date-picker",
@@ -212,10 +273,7 @@ class FlightAgent(BaseAgent):
                 "round_trip": "yes-no",
             }
             
-            question = question_templates.get(
-                first_missing_field,
-                f"Could you please provide the {field_names.get(first_missing_field, first_missing_field)}?"
-            )
+            question = question_templates.get_question(first_missing_field, detected_language)
             
             action = {
                 "action": action_template.get(first_missing_field),
@@ -235,7 +293,9 @@ class FlightAgent(BaseAgent):
 
         # Trường hợp đã đủ thông tin
         writer = get_stream_writer()
-        final_msg = "Perfect! I have all the information I need to help you."
+        
+        # Get completion message from templates
+        final_msg = question_templates.get_completion_message(detected_language)
         
         # Stream thông báo hoàn thành
         for piece in chunk_text(final_msg, n=4):
@@ -247,7 +307,7 @@ class FlightAgent(BaseAgent):
             "messages": [AIMessage(content=final_msg)]
         }
     
-    def process_booking(self, state: FlightBookingState, config: RunnableConfig) -> FlightBookingState:
+    def process_booking(self, state: FlightBookingState, config: RunnableConfig = None) -> FlightBookingState:
         """Enhanced main processing node with better tool handling and conversation flow."""
         intent_classification = state.get("intent_classification")
         intent = intent_classification.intent if intent_classification else ""
@@ -378,12 +438,16 @@ Use the cancel_booking tool to process the cancellation."""
         workflow = StateGraph(FlightBookingState)
         
         # Add nodes
+        workflow.add_node("save_conversation", self.save_conversation)
         workflow.add_node("classify_intent", self.classify_intent)
         workflow.add_node("collect_info", self.collect_booking_info)
         workflow.add_node("process_booking", self.process_booking)
         
-        # Add edges
+        # Add edges - save_conversation and classify_intent run in parallel
+        workflow.add_edge(START, "save_conversation")
         workflow.add_edge(START, "classify_intent")
+        
+        # After both save_conversation and classify_intent complete, continue with routing
         workflow.add_conditional_edges(
             "classify_intent",
             self.route_based_on_intent,

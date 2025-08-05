@@ -55,25 +55,39 @@ class BaseAgent(ABC):
             checkpointer = InMemorySaver()
             return self.graph.compile(checkpointer=checkpointer)
     
-    def run(self, user_input: str, thread_id: Optional[str] = None, user_id: Optional[str] = None) -> AgentResponse:
+    def run(self, user_input: str, thread_id: Optional[str] = None, user_id: Optional[str] = None, 
+            email: Optional[str] = None, phone: Optional[str] = None, session_id: Optional[str] = None,
+            **kwargs) -> AgentResponse:
         """Run the agent with user input."""
         try:
             # Compile graph if not already compiled
             compiled_graph = self.compile_graph()
             
-            # Prepare input
+            # Prepare input with thread_id and user_id in state
             inputs = {
-                "messages": [HumanMessage(content=user_input)]
+                "messages": [HumanMessage(content=user_input)],
+                "thread_id": thread_id or "default_thread",
+                "user_id": user_id or "default_user"
             }
             
-            # Prepare config with thread_id and user_id
+            # Prepare config with all available parameters
             config = {}
-            if thread_id or user_id:
-                config["configurable"] = {}
-                if thread_id:
-                    config["configurable"]["thread_id"] = thread_id
-                if user_id:
-                    config["configurable"]["user_id"] = user_id
+            config["configurable"] = {}
+            
+            if thread_id:
+                config["configurable"]["thread_id"] = thread_id
+            if user_id:
+                config["configurable"]["user_id"] = user_id
+            if email:
+                config["configurable"]["email"] = email
+            if phone:
+                config["configurable"]["phone"] = phone
+            if session_id:
+                config["configurable"]["session_id"] = session_id
+            
+            # Add any additional kwargs to configurable
+            for key, value in kwargs.items():
+                config["configurable"][key] = value
             
             # Run the graph with config to ensure checkpointing
             if config:
@@ -89,6 +103,7 @@ class BaseAgent(ABC):
                 intent=intent_classification.intent if intent_classification else 'unknown',
                 confidence=intent_classification.confidence if intent_classification else 0.0,
                 response=result.get('messages', [{}])[-1].content if result.get('messages') else '',
+                language=intent_classification.language if intent_classification else 'en',
                 booking_info=result.get('booking_info', {})
             )
             
@@ -103,25 +118,39 @@ class BaseAgent(ABC):
                 error=str(e)
             )
     
-    def stream(self, user_input: str, thread_id: Optional[str] = None, user_id: Optional[str] = None):
+    def stream(self, user_input: str, thread_id: Optional[str] = None, user_id: Optional[str] = None,
+               email: Optional[str] = None, phone: Optional[str] = None, session_id: Optional[str] = None,
+               **kwargs):
         """Stream the agent execution with custom data from get_stream_writer()."""
         try:
             # Compile graph if not already compiled
             compiled_graph = self.compile_graph()
             
-            # Prepare input
+            # Prepare input with thread_id and user_id in state
             inputs = {
-                "messages": [HumanMessage(content=user_input)]
+                "messages": [HumanMessage(content=user_input)],
+                "thread_id": thread_id or "default_thread",
+                "user_id": user_id or "default_user"
             }
             
-            # Prepare config with thread_id and user_id
+            # Prepare config with all available parameters
             config = {}
-            if thread_id or user_id:
-                config["configurable"] = {}
-                if thread_id:
-                    config["configurable"]["thread_id"] = thread_id
-                if user_id:
-                    config["configurable"]["user_id"] = user_id
+            config["configurable"] = {}
+            
+            if thread_id:
+                config["configurable"]["thread_id"] = thread_id
+            if user_id:
+                config["configurable"]["user_id"] = user_id
+            if email:
+                config["configurable"]["email"] = email
+            if phone:
+                config["configurable"]["phone"] = phone
+            if session_id:
+                config["configurable"]["session_id"] = session_id
+            
+            # Add any additional kwargs to configurable
+            for key, value in kwargs.items():
+                config["configurable"][key] = value
             
             # Stream the graph execution with custom mode
             if config:

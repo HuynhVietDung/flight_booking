@@ -98,37 +98,42 @@ class MockDataConfig:
 
 
 class Settings:
-    """Main settings class that combines all configurations."""
-    
+    """Main settings class that combines all configurations (Singleton)."""
+    _instance = None
+    _initialized = False
+
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super(Settings, cls).__new__(cls)
+        return cls._instance
+
     def __init__(self):
-        self.llm = LLMConfig(
-            model=os.getenv("LLM_MODEL", "gpt-4.1-mini"),
-            temperature=float(os.getenv("LLM_TEMPERATURE", "0")),
-            max_tokens=int(os.getenv("LLM_MAX_TOKENS", "1000")),
-            api_key=os.getenv("OPENAI_API_KEY"),
-            base_url=os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1")
-        )
-        
-        self.agent = AgentConfig(
-            intent_confidence_threshold=float(os.getenv("INTENT_CONFIDENCE_THRESHOLD", "0.6")),
-            default_passengers=int(os.getenv("DEFAULT_PASSENGERS", "1")),
-            default_class_type=os.getenv("DEFAULT_CLASS_TYPE", "economy")
-        )
-        
-        self.booking = BookingConfig()
-        self.mock_data = MockDataConfig()
-        
-        # Project paths
-        self.project_root = Path(__file__).parent.parent.parent
-        self.src_path = self.project_root / "src"
-        self.data_path = self.project_root / "data"
-        self.logs_path = self.project_root / "logs"
-        self.env_file = self.project_root / ".env"
-        
-        # Create necessary directories
-        self.data_path.mkdir(exist_ok=True)
-        self.logs_path.mkdir(exist_ok=True)
-    
+        if not self._initialized:
+            self.llm = LLMConfig(
+                model=os.getenv("LLM_MODEL", "gpt-4.1-mini"),
+                temperature=float(os.getenv("LLM_TEMPERATURE", "0")),
+                max_tokens=int(os.getenv("LLM_MAX_TOKENS", "1000")),
+                api_key=os.getenv("OPENAI_API_KEY"),
+                base_url=os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1")
+            )
+            self.agent = AgentConfig(
+                intent_confidence_threshold=float(os.getenv("INTENT_CONFIDENCE_THRESHOLD", "0.6")),
+                default_passengers=int(os.getenv("DEFAULT_PASSENGERS", "1")),
+                default_class_type=os.getenv("DEFAULT_CLASS_TYPE", "economy")
+            )
+            self.booking = BookingConfig()
+            self.mock_data = MockDataConfig()
+            # Project paths
+            self.project_root = Path(__file__).parent.parent.parent
+            self.src_path = self.project_root / "src"
+            self.data_path = self.project_root / "data"
+            self.logs_path = self.project_root / "logs"
+            self.env_file = self.project_root / ".env"
+            # Create necessary directories
+            self.data_path.mkdir(exist_ok=True)
+            self.logs_path.mkdir(exist_ok=True)
+            self._initialized = True
+
     def validate(self) -> bool:
         """Validate the configuration."""
         errors = []
@@ -150,83 +155,7 @@ class Settings:
         
         print("✅ Configuration validated successfully")
         return True
-    
-    def get_llm_config(self) -> Dict[str, Any]:
-        """Get LLM configuration dictionary."""
-        return {
-            "model": self.llm.model,
-            "temperature": self.llm.temperature,
-            "max_tokens": self.llm.max_tokens
-        }
-    
-    def print_config(self):
-        """Print current configuration."""
-        print("🔧 Flight Booking Agent Configuration")
-        print("=" * 50)
-        print(f"Environment File: {self.env_file} ({'✅ Found' if self.env_file.exists() else '❌ Not found'})")
-        print(f"LLM Model: {self.llm.model}")
-        print(f"LLM Temperature: {self.llm.temperature}")
-        print(f"LLM Max Tokens: {self.llm.max_tokens}")
-        print(f"Intent Confidence Threshold: {self.agent.intent_confidence_threshold}")
-        print(f"Default Passengers: {self.agent.default_passengers}")
-        print(f"Default Class Type: {self.agent.default_class_type}")
-        print(f"OpenAI API Key: {'✅ Set' if self.llm.api_key else '❌ Not set'}")
-        print(f"Project Root: {self.project_root}")
-        print()
-    
-    def create_env_template(self):
-        """Create a template .env file if it doesn't exist."""
-        if not self.env_file.exists():
-            template_content = """# Flight Booking Agent Environment Configuration
-
-# LLM Configuration
-LLM_MODEL=gpt-4.1-mini
-LLM_TEMPERATURE=0
-LLM_MAX_TOKENS=1000
-
-# Intent Classification
-INTENT_CONFIDENCE_THRESHOLD=0.6
-
-# Booking Configuration
-DEFAULT_PASSENGERS=1
-DEFAULT_CLASS_TYPE=economy
-
-# OpenAI Configuration (required)
-OPENAI_API_KEY=your-openai-api-key-here
-OPENAI_BASE_URL=https://api.openai.com/v1
-
-# Optional: Custom settings
-# LOG_LEVEL=INFO
-# DEBUG_MODE=false
-"""
-            self.env_file.write_text(template_content)
-            print(f"✅ Created .env template at {self.env_file}")
-            print("   Please edit the file and add your OpenAI API key")
-        else:
-            print(f"✅ .env file already exists at {self.env_file}")
 
 
 # Global settings instance
-settings = Settings()
-
-
-# Environment variable examples
-ENV_EXAMPLES = """
-# Environment Variables (set these in your .env file)
-
-# LLM Configuration
-LLM_MODEL=gpt-4.1-mini
-LLM_TEMPERATURE=0
-LLM_MAX_TOKENS=1000
-
-# Intent Classification
-INTENT_CONFIDENCE_THRESHOLD=0.6
-
-# Booking Configuration
-DEFAULT_PASSENGERS=1
-DEFAULT_CLASS_TYPE=economy
-
-# OpenAI Configuration (required)
-OPENAI_API_KEY=your-openai-api-key-here
-OPENAI_BASE_URL=https://api.openai.com/v1
-""" 
+settings = Settings() 

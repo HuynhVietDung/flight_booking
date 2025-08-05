@@ -122,6 +122,7 @@ def main():
                 
                 if response.success:
                     print(f"🎯 Intent: {response.intent} (confidence: {response.confidence:.2f})")
+                    print(f"🌐 Language: {response.language}")
                     if response.booking_info:
                         print(f"📋 Booking Info: {response.booking_info}")
                     print(f"🤖 Agent: {response.response}")
