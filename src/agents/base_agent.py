@@ -103,6 +103,42 @@ class BaseAgent(ABC):
                 error=str(e)
             )
     
+    def stream(self, user_input: str, thread_id: Optional[str] = None, user_id: Optional[str] = None):
+        """Stream the agent execution with custom data from get_stream_writer()."""
+        try:
+            # Compile graph if not already compiled
+            compiled_graph = self.compile_graph()
+            
+            # Prepare input
+            inputs = {
+                "messages": [HumanMessage(content=user_input)]
+            }
+            
+            # Prepare config with thread_id and user_id
+            config = {}
+            if thread_id or user_id:
+                config["configurable"] = {}
+                if thread_id:
+                    config["configurable"]["thread_id"] = thread_id
+                if user_id:
+                    config["configurable"]["user_id"] = user_id
+            
+            # Stream the graph execution with custom mode
+            if config:
+                return compiled_graph.stream(inputs, config=config, stream_mode="custom")
+            else:
+                return compiled_graph.stream(inputs, stream_mode="custom")
+            
+        except Exception as e:
+            # Return a generator that yields the error
+            def error_generator():
+                yield {
+                    "type": "error",
+                    "message": str(e),
+                    "success": False
+                }
+            return error_generator()
+    
     def get_available_tools(self) -> List[str]:
         """Get list of available tool names."""
         return [tool.name for tool in self.tools]

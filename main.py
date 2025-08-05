@@ -66,6 +66,7 @@ def main():
                 print("  - config: Show current configuration")
                 print("  - history: Info about chat history (managed by LangGraph)")
                 print("  - summary: Info about session summary (managed by LangGraph)")
+                print("  - stream: Enable streaming mode for next interaction")
                 continue
             elif user_input.lower() == 'tools':
                 tools = agent.get_available_tools()
@@ -84,23 +85,50 @@ def main():
                 print("   Use LangGraph Studio or API to view session details")
                 print()
                 continue
+            elif user_input.lower() == 'stream':
+                print("🔄 Streaming mode enabled for next interaction")
+                print("   You'll see questions streamed character by character")
+                print()
+                continue
             elif not user_input:
                 continue
             
             print("🤖 Processing...")
             
-            # Run agent with thread_id and user_id
-            response = agent.run(user_input, thread_id=thread_id, user_id=user_id)
+            # Check if user wants streaming (simple heuristic: if they mentioned "stream" or "show me")
+            use_streaming = any(word in user_input.lower() for word in ['stream', 'show me', 'step by step', 'progress'])
             
-            if response.success:
-                print(f"🎯 Intent: {response.intent} (confidence: {response.confidence:.2f})")
-                if response.booking_info:
-                    print(f"📋 Booking Info: {response.booking_info}")
-                print(f"🤖 Agent: {response.response}")
+            if use_streaming:
+                print("🔄 Streaming mode activated...")
+                print()
+                
+                # Stream the agent execution
+                current_message = ""
+                for chunk in agent.stream(user_input, thread_id=thread_id, user_id=user_id):
+                    # Handle custom stream data from get_stream_writer()
+                    if chunk.get("type") == "question_chunk":
+                        print(chunk["content"], end="", flush=True)
+                        current_message += chunk["content"]
+                    elif chunk.get("type") == "completion_chunk":
+                        print(chunk["content"], end="", flush=True)
+                        current_message += chunk["content"]
+                    elif chunk.get("type") == "error":
+                        print(f"❌ Error: {chunk['message']}")
+                
+                print("\n")
             else:
-                print(f"❌ Error: {response.error}")
-            
-            print()
+                # Run agent normally with thread_id and user_id
+                response = agent.run(user_input, thread_id=thread_id, user_id=user_id)
+                
+                if response.success:
+                    print(f"🎯 Intent: {response.intent} (confidence: {response.confidence:.2f})")
+                    if response.booking_info:
+                        print(f"📋 Booking Info: {response.booking_info}")
+                    print(f"🤖 Agent: {response.response}")
+                else:
+                    print(f"❌ Error: {response.error}")
+                
+                print()
             
         except KeyboardInterrupt:
             print("\n👋 Goodbye!")

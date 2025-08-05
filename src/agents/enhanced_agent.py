@@ -8,6 +8,7 @@ from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.output_parsers import JsonOutputParser
 from langgraph.graph import StateGraph, START, END
 from langchain_core.runnables import RunnableConfig
+from langgraph.config import get_stream_writer
 
 from src.agents.base_agent import BaseAgent
 from src.config import settings
@@ -24,6 +25,11 @@ DEFAULT_SYSTEM_PROMPT = """You are Tebby, a helpful flight booking assistant. An
 booking, or travel in general. Be friendly and informative. If they want to book or search for flights,
 guide them through the process."""
 
+def chunk_text(text: str, n: int = 8):
+    """Chia text thành mảnh nhỏ để stream (theo ký tự)."""
+    for i in range(0, len(text), n):
+        yield text[i:i+n]
+
 class FlightAgent(BaseAgent):
     """Enhanced flight booking agent with advanced features."""
     
@@ -39,8 +45,10 @@ class FlightAgent(BaseAgent):
         # logger.info(f"Messages: {messages}")
         recent_messages = []
         for msg in messages[-10:]:
-            if isinstance(msg, HumanMessage):
+            if isinstance(msg, HumanMessage) and isinstance(msg.content, list) and msg.content:                
                 recent_messages.append("User: " + msg.content[0]['text'])
+            elif isinstance(msg, HumanMessage) and isinstance(msg.content, str):
+                recent_messages.append("User: " + msg.content)
             elif isinstance(msg, AIMessage):
                 recent_messages.append("Assistant: " + msg.content)
             else:
@@ -101,7 +109,7 @@ class FlightAgent(BaseAgent):
             }
     
     def collect_booking_info(self, state: FlightBookingState) -> FlightBookingState:
-        """Intelligently extract and request missing booking information based on intent reasoning."""
+        """Intelligently extract and request missing booking information with streaming."""
         # logger.info(f"Collecting booking info for state: {state}")
 
         intent_classification = state.get("intent_classification")
@@ -177,6 +185,9 @@ class FlightAgent(BaseAgent):
         logger.info(f"Missing fields: {missing_fields}")
         
         if missing_fields:
+            # Get stream writer
+            writer = get_stream_writer()
+            
             # Generate a natural question for the first missing field
             field_names = settings.booking.field_names
             first_missing_field = missing_fields[0]
@@ -200,17 +211,20 @@ class FlightAgent(BaseAgent):
                 "passengers": "passenger",
                 "round_trip": "yes-no",
             }
-            question = question_templates.get(first_missing_field, f"Could you please provide the {field_names.get(first_missing_field, first_missing_field)}?")
-            if action_template.get(first_missing_field, None):
-                action = {
-                    "action": action_template.get(first_missing_field),
-                    "is_show": True
-                }
-            else:
-                action = {
-                    "action": None,
-                    "is_show": False
-                }
+            
+            question = question_templates.get(
+                first_missing_field,
+                f"Could you please provide the {field_names.get(first_missing_field, first_missing_field)}?"
+            )
+            
+            action = {
+                "action": action_template.get(first_missing_field),
+                "is_show": bool(action_template.get(first_missing_field))
+            }
+
+            # Stream câu hỏi theo từng phần
+            for piece in chunk_text(question, n=4):
+                writer({"type": "question_chunk", "content": piece})
 
             return {
                 "booking_info": current_info,
@@ -218,13 +232,20 @@ class FlightAgent(BaseAgent):
                 "action": action,
                 "messages": [AIMessage(content=question)]
             }
-        else:
-            # All information collected
-            return {
-                "booking_info": current_info,
-                "current_step": "info_complete",
-                "messages": [AIMessage(content="Perfect! I have all the information I need to help you.")]
-            }
+
+        # Trường hợp đã đủ thông tin
+        writer = get_stream_writer()
+        final_msg = "Perfect! I have all the information I need to help you."
+        
+        # Stream thông báo hoàn thành
+        for piece in chunk_text(final_msg, n=4):
+            writer({"type": "completion_chunk", "content": piece})
+        
+        return {
+            "current_step": "info_complete",
+            "booking_info": current_info,
+            "messages": [AIMessage(content=final_msg)]
+        }
     
     def process_booking(self, state: FlightBookingState, config: RunnableConfig) -> FlightBookingState:
         """Enhanced main processing node with better tool handling and conversation flow."""
