@@ -61,9 +61,6 @@ class FlightAgent(BaseAgent):
                 phone = configurable.get("phone")
                 session_id = configurable.get("session_id")
             
-            # Fallback nếu không có trong config
-            thread_id = thread_id or state.get("thread_id", "unknown")
-            user_id = user_id or state.get("user_id", "unknown")
             
             # Get the latest user message
             user_input = ""
@@ -96,12 +93,31 @@ class FlightAgent(BaseAgent):
                 else:
                     logger.warning(f"Failed to save conversation entry for thread {thread_id}")
             
-            # Return state unchanged
-            return state
+            # Return state without intent_classification to avoid conflicts
+            return {
+                "messages": state.get("messages", []),
+                "booking_info": state.get("booking_info", {}),
+                "conversation_history": state.get("conversation_history"),
+                "current_step": state.get("current_step", ""),
+                "data": state.get("data", ""),
+                "action": state.get("action", {}),
+                "thread_id": state.get("thread_id", ""),
+                "user_id": state.get("user_id", "")
+            }
             
         except Exception as e:
             logger.error(f"Error in save_conversation: {e}")
-            return state
+            # Return state without intent_classification to avoid conflicts
+            return {
+                "messages": state.get("messages", []),
+                "booking_info": state.get("booking_info", {}),
+                "conversation_history": state.get("conversation_history"),
+                "current_step": state.get("current_step", ""),
+                "data": state.get("data", ""),
+                "action": state.get("action", {}),
+                "thread_id": state.get("thread_id", ""),
+                "user_id": state.get("user_id", "")
+            }
     
     def classify_intent(self, state: FlightBookingState, config: RunnableConfig = None) -> FlightBookingState:
         """Enhanced intent classification with confidence scoring."""
