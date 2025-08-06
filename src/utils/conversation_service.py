@@ -97,6 +97,7 @@ class ConversationService:
         return conversation
     
     def add_conversation_entry(self, thread_id: str, user_input: str, user_id: str, 
+                             assistant_response: str = None,
                              session_id: str = None, metadata: Dict[str, Any] = None) -> bool:
         """Add a new entry to an existing conversation."""
         try:
@@ -104,6 +105,7 @@ class ConversationService:
                 thread_id=thread_id,
                 user_id=user_id,
                 user_input=user_input,
+                assistant_response=assistant_response,
                 session_id=session_id,
                 metadata=metadata
             )
@@ -142,6 +144,19 @@ class ConversationService:
     def get_conversation_entries(self, thread_id: str, limit: Optional[int] = None) -> List[Dict[str, Any]]:
         """Get conversation entries for a thread."""
         return self.db.get_conversation_entries(thread_id, limit)
+    
+    def save_conversation_summary(self, thread_id: str, user_id: str, summary_text: str, 
+                                key_points: Optional[List[str]] = None, 
+                                intent_summary: Optional[str] = None,
+                                booking_info: Optional[Dict[str, Any]] = None) -> bool:
+        """Save a conversation summary."""
+        return self.db.save_conversation_summary(
+            thread_id, user_id, summary_text, key_points, intent_summary, booking_info
+        )
+    
+    def get_conversation_summary_detailed(self, thread_id: str) -> Optional[Dict[str, Any]]:
+        """Get detailed conversation summary including AI-generated summary."""
+        return self.db.get_conversation_summary_detailed(thread_id)
 
 
 # Global instance

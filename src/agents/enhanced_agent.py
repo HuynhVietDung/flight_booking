@@ -18,6 +18,7 @@ from src.utils import (
     BookingInformation
 )
 from src.utils.conversation_service import conversation_service
+from langchain_core.prompts import ChatPromptTemplate
 import logging
 from src.utils.models import QuestionTemplates
 from datetime import datetime
@@ -62,14 +63,24 @@ class FlightAgent(BaseAgent):
                 session_id = configurable.get("session_id")
             
             
-            # Get the latest user message
+            # Get the latest user message and assistant response
             user_input = ""
-            for msg in reversed(messages):
+            assistant_response = ""
+            
+            # Find the latest user message and assistant response pair
+            for i in range(len(messages) - 1, -1, -1):
+                msg = messages[i]
                 if isinstance(msg, HumanMessage):
                     if isinstance(msg.content, list) and msg.content:
                         user_input = msg.content[0]['text']
                     elif isinstance(msg.content, str):
                         user_input = msg.content
+                    
+                    # Look for assistant response after this user message
+                    if i + 1 < len(messages):
+                        next_msg = messages[i + 1]
+                        if isinstance(next_msg, AIMessage):
+                            assistant_response = next_msg.content
                     break
             
             if user_input:
@@ -77,6 +88,7 @@ class FlightAgent(BaseAgent):
                 success = conversation_service.add_conversation_entry(
                     thread_id=thread_id,
                     user_input=user_input,
+                    assistant_response=assistant_response,
                     user_id=user_id,
                     session_id=session_id,
                     metadata={
@@ -93,10 +105,9 @@ class FlightAgent(BaseAgent):
                 else:
                     logger.warning(f"Failed to save conversation entry for thread {thread_id}")
             
-            # Return state without intent_classification to avoid conflicts
+            # Return state without intent_classification and booking_info to avoid conflicts
             return {
                 "messages": state.get("messages", []),
-                "booking_info": state.get("booking_info", {}),
                 "conversation_history": state.get("conversation_history"),
                 "current_step": state.get("current_step", ""),
                 "data": state.get("data", ""),
@@ -107,10 +118,9 @@ class FlightAgent(BaseAgent):
             
         except Exception as e:
             logger.error(f"Error in save_conversation: {e}")
-            # Return state without intent_classification to avoid conflicts
+            # Return state without intent_classification and booking_info to avoid conflicts
             return {
                 "messages": state.get("messages", []),
-                "booking_info": state.get("booking_info", {}),
                 "conversation_history": state.get("conversation_history"),
                 "current_step": state.get("current_step", ""),
                 "data": state.get("data", ""),
@@ -449,6 +459,100 @@ Use the cancel_booking tool to process the cancellation."""
         
         return "process_booking"
     
+    def summarize_conversation(self, state: FlightBookingState, config: RunnableConfig = None) -> FlightBookingState:
+        """Summarize the conversation and save to database if enough messages."""
+        try:
+            messages = state.get("messages", [])
+            if len(messages) < 5:
+                # Không đủ tin nhắn để tóm tắt, bỏ qua
+                return {
+                    "messages": state.get("messages", []),
+                    "thread_id": state.get("thread_id", ""),
+                    "user_id": state.get("user_id", "")
+                }
+            intent_classification = state.get("intent_classification")
+            booking_info = state.get("booking_info", {})
+            
+            # Get config values
+            thread_id = None
+            user_id = None
+            
+            if config and "configurable" in config:
+                configurable = config["configurable"]
+                thread_id = configurable.get("thread_id")
+                user_id = configurable.get("user_id")
+            
+            if not thread_id or not user_id:
+                logger.warning("Missing thread_id or user_id for conversation summary")
+                return {
+                    "messages": state.get("messages", []),
+                    "thread_id": state.get("thread_id", ""),
+                    "user_id": state.get("user_id", "")
+                }
+            
+            # Create conversation text for summarization
+            conversation_text = ""
+            for msg in messages[-10:]:  # Last 10 messages
+                if isinstance(msg, HumanMessage):
+                    if isinstance(msg.content, list) and msg.content:
+                        conversation_text += f"User: {msg.content[0]['text']}\n"
+                    elif isinstance(msg.content, str):
+                        conversation_text += f"User: {msg.content}\n"
+                elif isinstance(msg, AIMessage):
+                    conversation_text += f"Assistant: {msg.content}\n"
+            
+            # Create simple summary prompt
+            summary_prompt = ChatPromptTemplate.from_messages([
+                ("system", """You are an expert at summarizing conversations. Create a concise summary of the flight booking conversation.\n\nFocus on:\n1. User's main intent and what they wanted to accomplish\n2. Key booking information provided (dates, cities, passengers, etc.)\n3. Current status of the booking process\n4. Any important decisions or preferences mentioned\n\nKeep the summary concise but informative. Write in a natural, conversational tone."""),
+                ("user", "Summarize this conversation:\n{conversation_text}")
+            ])
+            
+            try:
+                # Get simple text summary from LLM
+                summary_chain = summary_prompt | self.processed_llm
+                summary_text = summary_chain.invoke({"conversation_text": conversation_text})
+                
+                # Save summary to database
+                success = conversation_service.save_conversation_summary(
+                    thread_id=thread_id,
+                    user_id=user_id,
+                    summary_text=summary_text.content,
+                    key_points=None,
+                    intent_summary=None,
+                    booking_info=booking_info
+                )
+                
+                if success:
+                    logger.info(f"Conversation summary saved for thread {thread_id}")
+                else:
+                    logger.warning(f"Failed to save conversation summary for thread {thread_id}")
+                
+            except Exception as e:
+                logger.error(f"Failed to generate conversation summary: {e}")
+                # Save basic summary on error
+                conversation_service.save_conversation_summary(
+                    thread_id=thread_id,
+                    user_id=user_id,
+                    summary_text=f"Conversation summary generation failed: {str(e)}",
+                    key_points=None,
+                    intent_summary=None,
+                    booking_info=booking_info
+                )
+            
+            # Return state unchanged
+            return {
+                "messages": state.get("messages", []),
+                "thread_id": state.get("thread_id", ""),
+                "user_id": state.get("user_id", "")
+            }
+        except Exception as e:
+            logger.error(f"Error in summarize_conversation: {e}")
+            return {
+                "messages": state.get("messages", []),
+                "thread_id": state.get("thread_id", ""),
+                "user_id": state.get("user_id", "")
+            }
+    
     def create_graph(self) -> StateGraph:
         """Create the enhanced flight booking agent graph."""
         workflow = StateGraph(FlightBookingState)
@@ -458,12 +562,17 @@ Use the cancel_booking tool to process the cancellation."""
         workflow.add_node("classify_intent", self.classify_intent)
         workflow.add_node("collect_info", self.collect_booking_info)
         workflow.add_node("process_booking", self.process_booking)
+        workflow.add_node("summarize_conversation", self.summarize_conversation)
         
-        # Add edges - save_conversation and classify_intent run in parallel
+        # Add edges - separate flows
         workflow.add_edge(START, "save_conversation")
         workflow.add_edge(START, "classify_intent")
         
-        # After both save_conversation and classify_intent complete, continue with routing
+        # Save conversation goes to summarize only
+        workflow.add_edge("save_conversation", "summarize_conversation")
+        workflow.add_edge("summarize_conversation", END)
+        
+        # Classify intent continues with main flow
         workflow.add_conditional_edges(
             "classify_intent",
             self.route_based_on_intent,
