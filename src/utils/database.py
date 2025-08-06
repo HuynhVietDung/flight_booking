@@ -52,8 +52,25 @@ class DatabaseManager:
                 user_id TEXT NOT NULL,
                 session_id TEXT,
                 user_input TEXT NOT NULL,
+                assistant_response TEXT,
                 timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 metadata TEXT,  -- JSON string
+                FOREIGN KEY (thread_id) REFERENCES conversations (thread_id)
+            )
+        """)
+        
+        # Create conversation_summaries table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS conversation_summaries (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                thread_id TEXT UNIQUE NOT NULL,
+                user_id TEXT NOT NULL,
+                summary_text TEXT NOT NULL,
+                key_points TEXT,  -- JSON string of key points
+                intent_summary TEXT,  -- Summary of user intents
+                booking_info TEXT,  -- JSON string of booking information
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (thread_id) REFERENCES conversations (thread_id)
             )
         """)
@@ -64,6 +81,7 @@ class DatabaseManager:
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_entries_thread_id ON conversation_entries (thread_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_entries_user_id ON conversation_entries (user_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_entries_timestamp ON conversation_entries (timestamp)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_summaries_thread_id ON conversation_summaries (thread_id)")
         
         conn.commit()
         conn.close()
@@ -90,6 +108,7 @@ class DatabaseManager:
             return False
     
     def add_conversation_entry(self, thread_id: str, user_id: str, user_input: str, 
+                              assistant_response: Optional[str] = None,
                               session_id: Optional[str] = None, metadata: Optional[Dict[str, Any]] = None) -> bool:
         """Add a new conversation entry."""
         try:
@@ -104,9 +123,9 @@ class DatabaseManager:
             
             cursor.execute("""
                 INSERT INTO conversation_entries 
-                (thread_id, user_id, session_id, user_input, metadata)
-                VALUES (?, ?, ?, ?, ?)
-            """, (thread_id, user_id, session_id, user_input, metadata_json))
+                (thread_id, user_id, session_id, user_input, assistant_response, metadata)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (thread_id, user_id, session_id, user_input, assistant_response, metadata_json))
             
             # Update conversation timestamp
             cursor.execute("""
@@ -281,6 +300,68 @@ class DatabaseManager:
             
         except Exception as e:
             logger.error(f"Failed to get conversation summary for {thread_id}: {e}")
+            return None
+    
+    def save_conversation_summary(self, thread_id: str, user_id: str, summary_text: str, 
+                                key_points: Optional[List[str]] = None, 
+                                intent_summary: Optional[str] = None,
+                                booking_info: Optional[Dict[str, Any]] = None) -> bool:
+        """Save a conversation summary."""
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor()
+            
+            cursor.execute("""
+                INSERT OR REPLACE INTO conversation_summaries 
+                (thread_id, user_id, summary_text, key_points, intent_summary, booking_info, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+            """, (
+                thread_id, 
+                user_id, 
+                summary_text,
+                json.dumps(key_points) if key_points else None,
+                intent_summary,
+                json.dumps(booking_info) if booking_info else None
+            ))
+            
+            conn.commit()
+            conn.close()
+            logger.info(f"Conversation summary saved for thread {thread_id}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to save conversation summary for {thread_id}: {e}")
+            return False
+    
+    def get_conversation_summary_detailed(self, thread_id: str) -> Optional[Dict[str, Any]]:
+        """Get detailed conversation summary including AI-generated summary."""
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor()
+            
+            cursor.execute("""
+                SELECT * FROM conversation_summaries 
+                WHERE thread_id = ?
+            """, (thread_id,))
+            
+            summary_row = cursor.fetchone()
+            if not summary_row:
+                conn.close()
+                return None
+            
+            summary = dict(summary_row)
+            
+            # Parse JSON fields
+            if summary.get('key_points'):
+                summary['key_points'] = json.loads(summary['key_points'])
+            if summary.get('booking_info'):
+                summary['booking_info'] = json.loads(summary['booking_info'])
+            
+            conn.close()
+            return summary
+            
+        except Exception as e:
+            logger.error(f"Failed to get detailed conversation summary for {thread_id}: {e}")
             return None
     
     def delete_conversation(self, thread_id: str) -> bool:

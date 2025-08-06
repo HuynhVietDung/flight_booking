@@ -317,8 +317,8 @@ class QuestionTemplates:
             }
             
             self._completion_messages = {
-                "en": "Excellent! I have gathered all the necessary information to assist you with your booking.",
-                "vi": "Tuyệt vời! Tôi đã có đủ thông tin cần thiết để hỗ trợ quý khách đặt vé."
+                "en": "Excellent! Tebby has gathered all the necessary information to assist you.",
+                "vi": "Tuyệt vời! Tebby đã có đủ thông tin cần thiết để hỗ trợ quý khách."
             }
             
             self._fallback_language = "en"
