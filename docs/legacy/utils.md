@@ -1,18 +1,18 @@
-## Tiện ích, mô hình dữ liệu và dịch vụ phụ trợ
+## Utilities, Data Models, and Auxiliary Services
 
 ### `src/utils/models.py`
-- Khai báo schema Pydantic cho: `IntentClassification`, `BookingInformation`, `Order`, `Cart`, `PaymentStatus`, `OrderStatus`, ...
-- `FlightBookingState`: schema state của LangGraph.
-- `QuestionTemplates`: singleton sinh câu hỏi/ thông báo hoàn tất theo ngôn ngữ (`en`, `vi`).
+- Pydantic schemas: `IntentClassification`, `BookingInformation`, `Order`, `Cart`, `PaymentStatus`, `OrderStatus`, ...
+- `FlightBookingState` for LangGraph state.
+- `QuestionTemplates`: multilingual question/completion templates (`en`, `vi`).
 
 ### `src/utils/cart_service.py`
-- Quản lý `Cart` theo `user_id`, tạo `Order` từ `booking_data`, thêm vào giỏ, xử lý checkout hàng loạt.
-- Tích hợp `payment_service` để tạo transaction và cập nhật trạng thái thanh toán.
+- Manages `Cart` per `user_id`, creates `Order` from `booking_data`, adds to cart, processes batch checkout.
+- Integrates `payment_service` for transactions and payment status updates.
 
 ### `src/utils/payment_service.py`
-- Enum `PaymentMethod`, `PaymentStatus` (riêng của payment service).
-- `PaymentTransaction` (Pydantic) + `PaymentService` giả lập xử lý thanh toán: tạo transaction, process, sinh receipt, refund, truy vấn transaction.
+- Enums: `PaymentMethod`, `PaymentStatus` (service-specific).
+- `PaymentTransaction` (Pydantic) + `PaymentService`: mock payment processing; create, process, receipt, refund, get transaction(s).
 
-### `src/utils/database.py` và `src/utils/conversation_service.py`
-- `DatabaseManager`: thao tác SQLite (tạo bảng, CRUD hội thoại, entries, summaries, thống kê, cleanup).
-- `ConversationService`: lớp mỏng theo domain, dùng `db_manager` phía dưới.
+### `src/utils/database.py` and `src/utils/conversation_service.py`
+- `DatabaseManager`: SQLite CRUD (conversations, entries, summaries), stats, cleanup.
+- `ConversationService`: thin domain wrapper over `db_manager`.

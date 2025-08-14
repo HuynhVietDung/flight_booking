@@ -1,42 +1,32 @@
-## Bộ công cụ (Tools)
+## Tools
 
 File: `src/tools/flight_tools.py`
 
-Các tool sử dụng decorator `@tool`, được bind vào LLM để gọi theo nhu cầu trong `process_booking`.
+Tools use the `@tool` decorator and are bound to the LLM (used in `process_booking`).
 
-### Danh sách tool chính
+### Main tools
 - `search_flights(departure_city, arrival_city, date, passengers=1, class_type="economy")`
-  - Tìm chuyến bay (mock). Nếu route chưa có sẵn, sinh ngẫu nhiên dữ liệu hợp lý.
-  - Output là chuỗi mô tả danh sách chuyến bay và giá tính theo `passengers` và `class_type`.
+  - Mock flight search; generates plausible flights if the route is not pre-seeded.
+  - Returns a formatted string with flight list and price per class/passengers.
 
 - `book_flight(flight_number, passenger_name, email, passengers=1, class_type="economy", user_id=None)`
-  - Tạo booking (mock), sinh `booking_ref`, tính giá, và đồng thời tạo `Order` + add vào `Cart` của user.
-  - Không auto thanh toán. Hướng dẫn người dùng xem phương thức thanh toán và thực hiện.
+  - Mock booking; creates `Order` and adds to user's `Cart`.
+  - Does not auto-pay; returns guidance for payment tools.
 
-- `get_weather(city)`
-  - Trả về thông tin thời tiết (mock) theo thành phố.
+- `get_weather(city)`: mock weather info.
+- `get_flight_status(flight_number)`: mock status + gate.
+- `get_booking_info(booking_reference)` / `cancel_booking(booking_reference, email)`: mock booking lookup/cancel.
 
-- `get_flight_status(flight_number)`
-  - Mô phỏng trạng thái chuyến bay + cửa ra (gate).
+- `get_cart_summary(user_id)` / `remove_order_from_cart(user_id, order_id)` / `checkout_cart(user_id)`: cart and batch payment operations.
 
-- `get_booking_info(booking_reference)` / `cancel_booking(booking_reference, email)`
-  - Tra cứu thông tin booking hoặc huỷ booking (mock).
+- `get_payment_methods()` / `show_payment_methods()`: list methods, fees, processing time.
 
-- `get_cart_summary(user_id)` / `remove_order_from_cart(user_id, order_id)` / `checkout_cart(user_id)`
-  - Quản lý giỏ hàng và thanh toán hàng loạt.
+- `get_payment_summary(order_id, payment_method)` / `confirm_payment(order_id, payment_method, confirm)`: calculate totals+fees and process payment (mock) with receipt.
 
-- `get_payment_methods()` / `show_payment_methods()`
-  - Liệt kê phương thức thanh toán, phí xử lý, thời gian xử lý.
+- `get_payment_receipt(transaction_id)` / `get_user_payment_history(user_id)` / `refund_payment(transaction_id, reason)`: receipts, history, refund.
 
-- `get_payment_summary(order_id, payment_method)` / `confirm_payment(order_id, payment_method, confirm)`
-  - Xem chi tiết số tiền cần trả, phí xử lý; xác nhận và tiến hành thanh toán (mock), sinh receipt.
+- `get_pending_payments(user_id)` / `cancel_pending_payment(order_id)`: list/cancel pending payments.
 
-- `get_payment_receipt(transaction_id)` / `get_user_payment_history(user_id)` / `refund_payment(transaction_id, reason)`
-  - Xem hoá đơn, lịch sử thanh toán, hoàn tiền.
-
-- `get_pending_payments(user_id)` / `cancel_pending_payment(order_id)`
-  - Liệt kê các đơn chưa thanh toán và huỷ thanh toán đang chờ.
-
-### Lưu ý
-- Tất cả dữ liệu là mock, phục vụ demo. Trong production cần kết nối API thực (GDS, PSP,...).
-- Tích hợp với `cart_service` và `payment_service` qua các model trong `utils/models.py`.
+Notes:
+- All data is mock for demo; replace with real APIs in production.
+- Integrates with `cart_service` and `payment_service` models in `utils/models.py`.

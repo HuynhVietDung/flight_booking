@@ -1,23 +1,21 @@
-## Cơ sở dữ liệu và lưu trữ
+## Databases & Persistence
 
-Có hai cơ sở dữ liệu SQLite độc lập:
+Two SQLite databases:
 
-1) Checkpoint của LangGraph: `data/langgraph_checkpoints.db`
-   - Dùng trong `BaseAgent.compile_graph()` thông qua `SqliteSaver` để checkpoint state theo `thread_id`.
-   - Dùng các script `inspect_db.py` để xem nhanh cấu trúc và các checkpoint.
+1) LangGraph checkpoint: `data/langgraph_checkpoints.db`
+   - Used by `BaseAgent.compile_graph()` through `SqliteSaver` for per-thread state checkpoints.
+   - Inspect with `inspect_db.py` (tables, samples, search).
 
-2) CSDL hội thoại: `data/conversations.db`
-   - Quản lý qua `src/utils/database.py` (`DatabaseManager`) và `src/utils/conversation_service.py`.
-   - Bảng chính:
+2) Conversation database: `data/conversations.db`
+   - Managed via `src/utils/database.py` (`DatabaseManager`) and `src/utils/conversation_service.py`.
+   - Tables:
      - `conversations(thread_id UNIQUE, user_id, created_at, updated_at)`
      - `conversation_entries(thread_id, user_input, assistant_response, session_id, metadata JSON, timestamp)`
      - `conversation_summaries(thread_id UNIQUE, user_id, summary_text, key_points JSON, intent_summary, booking_info JSON)`
-   - API chính:
-     - Tạo/ghi/xoá hội thoại, thêm entry
-     - Lấy danh sách, tóm tắt, thống kê, cleanup theo thời gian
+   - Capabilities: create/write/delete conversations, add entries, list, summaries, stats, cleanup.
 
-### Công cụ xem và quản trị
-- `view_conversations.py`: liệt kê hoặc xem chi tiết hội thoại.
-- `view_summaries.py`: xem các bản tóm tắt hội thoại.
-- `manage_conversation_db.py`: lệnh `stats`, `list`, `show`, `delete`, `cleanup`, `export`, `search`.
-- `inspect_db.py`: kiểm tra database checkpoint LangGraph: bảng, mẫu dữ liệu, tìm kiếm theo nội dung.
+### Admin/Viewing Tools
+- `view_conversations.py`: list or inspect conversations.
+- `view_summaries.py`: list summaries.
+- `manage_conversation_db.py`: `stats`, `list`, `show`, `delete`, `cleanup`, `export`, `search`.
+- `inspect_db.py`: inspect LangGraph checkpoint DB (tables, sample data, content search).

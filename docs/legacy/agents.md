@@ -1,33 +1,33 @@
-## Agent và luồng xử lý
+## Agents & Processing Flow
 
 ### `BaseAgent` (`src/agents/base_agent.py`)
-- Khởi tạo 2 LLM: `llm` (dùng tool, sinh output người dùng thấy) và `processed_llm` (nhiệt độ thấp để parse JSON).
-- `tools`: bind toàn bộ tool từ `src/tools/flight_tools.py`.
-- `compile_graph(file_path)`: biên dịch `StateGraph` với checkpointer SQLite (`data/langgraph_checkpoints.db`).
-- `run(user_input, thread_id, user_id, ...)`: invoke graph, trả `AgentResponse` (intent, confidence, language, booking_info, response).
-- `stream(...)`: stream với `stream_mode="custom"` để phát mảnh câu hỏi/trả lời.
+- Two LLMs: `llm` (tool-enabled, user-facing) and `processed_llm` (low temperature for JSON parsing).
+- `tools`: binds all tools from `src/tools/flight_tools.py`.
+- `compile_graph(file_path)`: compiles `StateGraph` with SQLite checkpointer (`data/langgraph_checkpoints.db`).
+- `run(user_input, thread_id, user_id, ...)`: invokes the graph; returns `AgentResponse` (intent, confidence, language, booking_info, response).
+- `stream(...)`: streams with `stream_mode="custom"` emitting `question_chunk`/`completion_chunk`.
 
 ### `FlightAgent` (`src/agents/enhanced_agent.py`)
-Node chính:
-- `save_conversation`: trích `HumanMessage` + `AIMessage` cuối cùng rồi ghi vào `conversation_service` (SQLite `conversations.db`).
-- `classify_intent`: prompt phân loại intent + confidence + reasoning + language (JSONOutputParser → `IntentClassification`).
+Nodes:
+- `save_conversation`: extracts last `HumanMessage`/`AIMessage` pair and persists via `conversation_service` (SQLite `conversations.db`).
+- `classify_intent`: classifies intent with confidence, reasoning, language (JSON output → `IntentClassification`).
 - `collect_booking_info`:
-  - Dựa trên `required_fields` theo intent từ `settings.booking`.
-  - Dùng LLM để trích xuất fields còn thiếu từ reasoning, cập nhật `booking_info`.
-  - Nếu còn thiếu → stream câu hỏi tự nhiên theo ngôn ngữ (`QuestionTemplates`), trả `current_step=collecting_info` và `action` gợi ý UI.
-  - Nếu đủ → stream thông báo hoàn tất và đặt `current_step=info_complete`.
+  - Uses `settings.booking.required_fields` by intent.
+  - LLM extracts missing fields from reasoning, updates `booking_info`.
+  - If still missing → streams a natural multilingual question (`QuestionTemplates`), sets `current_step=collecting_info` and provides an `action` hint.
+  - If complete → streams completion message and sets `current_step=info_complete`.
 - `process_booking`:
-  - Tạo system prompt theo intent và `booking_info` hiện tại.
-  - Gọi LLM có bind tools. Nếu có `tool_calls` → thực thi tool và ghép kết quả vào câu trả lời.
-- `summarize_conversation`: khi đủ số message (>=5), sinh tóm tắt ngắn bằng LLM và lưu `conversation_summaries`.
+  - Builds system prompt from current intent and `booking_info`.
+  - Calls LLM with bound tools; executes tool calls and appends outputs.
+- `summarize_conversation`: when enough messages (>=5), generates a short summary and saves to `conversation_summaries`.
 
 Routing:
-- `route_based_on_intent`: quyết định `collect_info` vs `process_booking` dựa vào confidence và thiếu field.
-- `route_after_collect_info`: nếu vẫn đang `collecting_info` → `END` (đợi người dùng trả lời); nếu `info_complete` → `process_booking`.
+- `route_based_on_intent`: picks `collect_info` vs `process_booking` by confidence and missing fields.
+- `route_after_collect_info`: if `collecting_info` → `END` (await user); if `info_complete` → `process_booking`.
 
 ### State
-- Kiểu `FlightBookingState` gồm: `messages`, `intent_classification`, `booking_info`, `conversation_history`, `current_step`, `data`, `action`, `thread_id`, `user_id`.
+- `FlightBookingState`: `messages`, `intent_classification`, `booking_info`, `conversation_history`, `current_step`, `data`, `action`, `thread_id`, `user_id`.
 
-### Prompt và streaming
-- Sử dụng `ChatPromptTemplate`, `MessagesPlaceholder`, `JsonOutputParser`.
-- Streaming chia nhỏ chuỗi qua `chunk_text()` và `get_stream_writer()` để gửi sự kiện `question_chunk`/`completion_chunk`.
+### Prompts & Streaming
+- Uses `ChatPromptTemplate`, `MessagesPlaceholder`, `JsonOutputParser`.
+- Streaming splits strings via `chunk_text()` and `get_stream_writer()` to emit `question_chunk`/`completion_chunk` events.

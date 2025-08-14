@@ -1,30 +1,30 @@
-## Kiến trúc hệ thống
+## Architecture
 
-- **Core**: LangGraph `StateGraph` với các node chính: `save_conversation`, `classify_intent`, `collect_info`, `process_booking`, `summarize_conversation`.
-- **LLM**: `ChatOpenAI` (model, temperature, max_tokens cấu hình qua `.env`).
-- **Tools**: Tập hợp các `@tool` trong `src/tools/flight_tools.py` để tìm chuyến bay, đặt vé, giỏ hàng, thanh toán, thời tiết, tra cứu tình trạng chuyến bay, hoàn tiền,...
-- **State**: Kiểu `FlightBookingState` (Pydantic/TypedDict) lưu `messages`, `intent_classification`, `booking_info`, `current_step`, `thread_id`, `user_id`,...
-- **Persistence**:
-  - Checkpoint LangGraph: `data/langgraph_checkpoints.db`
-  - Lưu hội thoại/summarize SQLite: `data/conversations.db` qua `src/utils/database.py`
+- Core: LangGraph `StateGraph` with main nodes: `save_conversation`, `classify_intent`, `collect_info`, `process_booking`, `summarize_conversation`.
+- LLM: `ChatOpenAI` (configured via `.env`).
+- Tools: `@tool` functions in `src/tools/flight_tools.py` for flight search/booking, cart, payment, weather, flight status, refunds, etc.
+- State: `FlightBookingState` (TypedDict) holds `messages`, `intent_classification`, `booking_info`, `current_step`, `thread_id`, `user_id`, ...
+- Persistence:
+  - LangGraph checkpoint: `data/langgraph_checkpoints.db`
+  - Conversations and summaries: `data/conversations.db` driven by `src/utils/database.py`
 
-### Sơ đồ luồng
+### Flow
 ```
 START
  ├─ save_conversation ──> summarize_conversation ──> END
  └─ classify_intent ──(route)──> collect_info ──(route)──> process_booking ──> END
 ```
 
-### Trách nhiệm từng lớp/chức năng
-- `src/agents/base_agent.py`: Khởi tạo LLM, bind tools, biên dịch graph với checkpointer, expose `run()` và `stream()`.
-- `src/agents/enhanced_agent.py` (`FlightAgent`): Định nghĩa node logic chi tiết, prompt, parser, routing.
-- `src/config/settings.py`: Singleton `settings` gom `LLMConfig`, `AgentConfig`, `BookingConfig`, `MockDataConfig`, load `.env`, validate, tạo thư mục `data/`, `logs/`.
-- `src/utils/models.py`: Toàn bộ schema: intent, booking info, order/cart/payment enums & models, `QuestionTemplates` đa ngôn ngữ.
-- `src/utils/database.py`: SQLite manager (conversations, entries, summaries) + index, thống kê, cleanup.
-- `src/utils/conversation_service.py`: Service mỏng wrap `db_manager` theo domain conversation.
-- `src/tools/flight_tools.py`: Các tool thao tác booking, cart, payment, weather, status.
+### Responsibilities by module
+- `src/agents/base_agent.py`: init LLM, bind tools, compile graph with checkpointer, expose `run()`/`stream()`.
+- `src/agents/enhanced_agent.py` (`FlightAgent`): node logic, prompts, parsers, routing.
+- `src/config/settings.py`: singleton `settings` combining `LLMConfig`, `AgentConfig`, `BookingConfig`, `MockDataConfig`; loads `.env`; validates; creates `data/`, `logs/`.
+- `src/utils/models.py`: schemas for intents, booking info, order/cart/payment, `QuestionTemplates`.
+- `src/utils/database.py`: SQLite manager (conversations, entries, summaries), indices, stats, cleanup.
+- `src/utils/conversation_service.py`: thin domain service wrapping `db_manager`.
+- `src/tools/flight_tools.py`: tools for booking, cart, payments, weather, status.
 
-### Quy tắc routing chính
-- Confidence thấp → `process_booking` để LLM hỏi rõ.
-- `book_flight`/`search_flights` thiếu trường bắt buộc → `collect_info` hỏi bổ sung (streaming câu hỏi theo ngôn ngữ phát hiện).
-- Đủ thông tin → `process_booking` thực thi và có thể gọi tool.
+### Routing rules
+- Low confidence → `process_booking` to ask clarifying questions.
+- For `book_flight`/`search_flights`, if required fields are missing → go to `collect_info` (multilingual streaming question).
+- If enough info or a simple request → `process_booking`.

@@ -1,56 +1,48 @@
-## Tổng quan hệ thống
+## System Overview
 
-### Giới thiệu
-Tebby là trợ lý đặt vé máy bay (demo) xây dựng trên LangGraph/LangChain. Mục tiêu là mô phỏng một quy trình
-tư vấn và hỗ trợ đặt vé end-to-end: nhận hiểu ý định, thu thập thông tin còn thiếu, tìm chuyến bay,
-đặt vé (mock), quản lý giỏ hàng và thanh toán (mock), đồng thời lưu vết hội thoại/summarize để tra cứu.
+### Introduction
+Tebby is a demo flight-booking assistant built with LangGraph/LangChain. It simulates an end-to-end travel assistant: intent understanding, information collection, flight search, mock booking, cart and mock payment handling, and conversation storage/summarization.
 
-### Chức năng chính
-- Phân loại ý định (intent) kèm confidence, reasoning, và nhận diện ngôn ngữ
-- Thu thập/chốt thông tin đặt vé (hỏi bổ sung đa ngôn ngữ, streaming câu hỏi/gợi ý)
-- Tìm chuyến bay (mock), hiển thị giá theo hạng vé và số hành khách
-- Đặt vé (mock), tạo Order và thêm vào Cart
-- Quản lý giỏ hàng & thanh toán (mock): phương thức thanh toán, tính phí xử lý, xác nhận thanh toán, biên lai
-- Tiện ích: tra cứu thời tiết, trạng thái chuyến bay, thông tin/huỷ đặt chỗ (mock)
-- Ghi và tóm tắt hội thoại vào SQLite; checkpoint tiến trình bằng LangGraph checkpointer
-- Cấu hình qua .env; CLI hỗ trợ xem/tra cứu/xuất hội thoại
-- Thiết kế module hoá, dễ mở rộng (tool mới, prompt, routing, thêm ngôn ngữ, tích hợp API thật)
+### Key Features
+- Intent classification with confidence, reasoning, and language detection
+- Collect/confirm booking info (multilingual prompts, streaming questions/hints)
+- Flight search (mock) with pricing by class and passenger count
+- Booking (mock), create Order and add to Cart
+- Cart & payment (mock): methods, processing fee, payment confirmation, receipt
+- Utilities: weather, flight status, booking info/cancellation (mock)
+- Persist conversations and summaries in SQLite; checkpoint state with LangGraph
+- .env-driven configuration; CLI to inspect/search/export conversations
+- Modular, extensible design (new tools, prompts, routing, languages, real APIs)
 
+### Architecture
+- Core: LangGraph `StateGraph` with nodes: `save_conversation`, `classify_intent`, `collect_info`, `process_booking`, `summarize_conversation`.
+- LLM: `ChatOpenAI` (configured via `.env`).
+- Tools: `@tool` functions in `src/tools/flight_tools.py`.
+- State: `FlightBookingState` stores messages, intent, booking_info, current_step, thread_id, user_id.
+- Persistence: LangGraph checkpoint `data/langgraph_checkpoints.db`, conversation DB `data/conversations.db`.
 
-Tài liệu này gộp các nội dung: kiến trúc, agent/luồng xử lý và bộ công cụ (tools).
-
-### Kiến trúc hệ thống
-
-- Core: LangGraph `StateGraph` với các node: `save_conversation`, `classify_intent`, `collect_info`, `process_booking`, `summarize_conversation`.
-- LLM: `ChatOpenAI` (cấu hình qua `.env`).
-- Tools: tập hợp `@tool` trong `src/tools/flight_tools.py`.
-- State: `FlightBookingState` lưu trữ messages, intent, booking_info, current_step, thread_id, user_id.
-- Persistence: checkpoint LangGraph `data/langgraph_checkpoints.db`, hội thoại `data/conversations.db`.
-
-Sơ đồ luồng:
+Flow:
 ```
 START
  ├─ save_conversation ──> summarize_conversation ──> END
  └─ classify_intent ──(route)──> collect_info ──(route)──> process_booking ──> END
 ```
 
-### Agent và luồng xử lý
+### Agents & Flow
+- BaseAgent: init LLM, bind tools, compile graph with checkpointer; `run()` returns `AgentResponse`, `stream()` emits `question_chunk`/`completion_chunk`.
+- FlightAgent nodes
+  - save_conversation: persist the latest user/assistant pair
+  - classify_intent: JSON result (intent, confidence, reasoning, language)
+  - collect_booking_info: extract/complete missing fields, ask user (multilingual), update `booking_info`
+  - process_booking: build system prompt by intent, call tools when needed
+  - summarize_conversation: summarize when message count is sufficient
+- Routing: missing fields → collect_info; simple/complete → process_booking; low confidence → process_booking for clarification.
 
-- BaseAgent: khởi tạo LLM, bind tools, compile graph với checkpointer; `run()` trả `AgentResponse`, `stream()` phát sự kiện `question_chunk`/`completion_chunk`.
-- FlightAgent: các node logic
-  - save_conversation: lưu lượt hội thoại gần nhất
-  - classify_intent: phân loại intent (JSON: intent, confidence, reasoning, language)
-  - collect_booking_info: trích xuất/hoàn thiện field còn thiếu, hỏi người dùng (đa ngôn ngữ), cập nhật `booking_info`
-  - process_booking: tạo system prompt theo intent, gọi tools khi cần
-  - summarize_conversation: tóm tắt khi đủ số lượng tin nhắn
-- Routing: thiếu field → collect_info; đủ/đơn giản → process_booking; confidence thấp → process_booking để hỏi rõ.
+### Tools (high-level)
+- search_flights: mock flight search with class/passenger pricing
+- book_flight: mock booking; creates order and adds to cart; guides to payment
+- get_weather, get_flight_status: mock utilities
+- get_booking_info, cancel_booking: mock booking operations
+- Cart & Payment tools: `get_cart_summary`, `remove_order_from_cart`, `checkout_cart`, `get_payment_methods`, `show_payment_methods`, `get_payment_summary`, `confirm_payment`, `get_payment_receipt`, `get_user_payment_history`, `refund_payment`, `get_pending_payments`, `cancel_pending_payment`
 
-### Bộ công cụ (Tools)
-
-- search_flights: tìm chuyến bay (mock), tính giá theo `passengers` và `class_type`.
-- book_flight: tạo booking (mock), sinh order + add vào cart, hướng dẫn thanh toán.
-- get_weather, get_flight_status: tiện ích tra cứu (mock).
-- get_booking_info, cancel_booking: thao tác với booking (mock).
-- Cart & Payment: `get_cart_summary`, `remove_order_from_cart`, `checkout_cart`, `get_payment_methods`, `show_payment_methods`, `get_payment_summary`, `confirm_payment`, `get_payment_receipt`, `get_user_payment_history`, `refund_payment`, `get_pending_payments`, `cancel_pending_payment`.
-
-Tham khảo chi tiết hàm tại mã nguồn `src/tools/flight_tools.py`.
+See `src/tools/flight_tools.py` for signatures.

@@ -1,22 +1,20 @@
-## Tham chiếu
+## Reference
 
-Tài liệu này gộp API public, models và utils.
-
-### API public
+### Public API
 ```python
 from src import FlightAgent, BaseAgent, settings, AgentResponse, FlightBookingState, flight_tools
 ```
 - `FlightAgent.run(user_input, thread_id=None, user_id=None, **kwargs) -> AgentResponse`
-- `FlightAgent.stream(...) -> Iterator[dict]` với `question_chunk`/`completion_chunk`
+- `FlightAgent.stream(...) -> Iterator[dict]` with `question_chunk`/`completion_chunk`
 - `settings.validate()`, `settings.print_config()`, `settings.create_env_template()`
 
 ### Models & State
 - Intent/Booking: `IntentClassification`, `BookingInformation`, `FlightBookingState`
-- Đặt vé và giỏ hàng: `BookingData`, `Order`, `Cart`, `OrderStatus`, `PaymentStatus`
-- Thanh toán: `PaymentMethod`, `PaymentTransaction` (trong `payment_service`)
-- `QuestionTemplates`: câu hỏi/hoàn tất theo ngôn ngữ
+- Booking/Cart: `BookingData`, `Order`, `Cart`, `OrderStatus`, `PaymentStatus`
+- Payment: `PaymentMethod`, `PaymentTransaction` (in `payment_service`)
+- `QuestionTemplates` for multilingual prompts/completion
 
 ### Utils/Services
-- `cart_service`: tạo order từ booking, giỏ hàng, checkout, cập nhật trạng thái
-- `payment_service`: tạo/ xử lý giao dịch, sinh receipt, lịch sử, refund
-- `database.db_manager` và `conversation_service`: CRUD hội thoại, summary, thống kê, cleanup
+- `cart_service`: create orders from bookings, cart ops, checkout, status updates
+- `payment_service`: create/process transactions, receipts, history, refunds
+- `database.db_manager` & `conversation_service`: CRUD conversations, summaries, stats, cleanup

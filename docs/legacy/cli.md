@@ -1,39 +1,31 @@
-## Công cụ dòng lệnh (CLI) và kịch bản hỗ trợ
+## CLI Utilities & Scripts
 
 ### `main.py`
-- Ứng dụng console chính: kiểm tra `.env`, validate config, khởi tạo `FlightAgent`, vòng lặp nhập/xuất.
-- Lệnh nội bộ: `quit`, `help`, `tools`, `config`, `history`, `summary`, `stream`.
-- Tạo `thread_id` ngẫu nhiên cho phiên, `user_id` mẫu.
+- Console app: checks `.env`, validates config, initializes `FlightAgent`, interactive loop.
+- Built-in commands: `quit`, `help`, `tools`, `config`, `history`, `summary`, `stream`.
+- Generates a random `thread_id` and sample `user_id`.
 
 ### `manage_conversation_db.py`
-- Lệnh:
-  - `stats`: thống kê DB
-  - `list [--user USER] [--limit N]`: liệt kê hội thoại
-  - `show --thread THREAD_ID`: xem chi tiết hội thoại
-  - `delete --thread THREAD_ID`: xoá hội thoại (có xác nhận)
-  - `cleanup [--days N]`: dọn hội thoại cũ
-  - `export --thread THREAD_ID [--output FILE]`: xuất JSON
-  - `search --query TEXT [--user USER]`: tìm theo nội dung
-
-Ví dụ:
-```bash
-python manage_conversation_db.py stats
-python manage_conversation_db.py list --limit 10
-python manage_conversation_db.py show --thread <id>
-python manage_conversation_db.py export --thread <id> --output out.json
-```
+Commands:
+- `stats`: DB statistics
+- `list [--user USER] [--limit N]`: list conversations
+- `show --thread THREAD_ID`: show conversation details
+- `delete --thread THREAD_ID`: delete conversation (with confirmation)
+- `cleanup [--days N]`: cleanup old conversations
+- `export --thread THREAD_ID [--output FILE]`: export JSON
+- `search --query TEXT [--user USER]`: search by content
 
 ### `view_conversations.py`
-- `--thread THREAD_ID`: xem chi tiết
-- `--list`: liệt kê rút gọn
-- Không tham số: in toàn bộ log các hội thoại
+- `--thread THREAD_ID`: view details
+- `--list`: compact listing
+- No flags: print full logs for all threads
 
 ### `view_summaries.py`
-- Không tham số: liệt kê summaries
-- Truyền `THREAD_ID` để xem summary chi tiết
+- No flags: list summaries
+- Pass `THREAD_ID` to view a specific summary
 
 ### `inspect_db.py`
-- Kiểm tra DB checkpoint LangGraph:
+LangGraph checkpoint DB utilities:
 ```bash
 python inspect_db.py basic
 python inspect_db.py detailed

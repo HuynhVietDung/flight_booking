@@ -1,19 +1,19 @@
-## Lỗi thường gặp và cách khắc phục
+## Troubleshooting
 
-- Không có `.env` hoặc thiếu `OPENAI_API_KEY`
-  - Chạy `python main.py` lần đầu để sinh mẫu `.env` hoặc tự tạo và thêm API key.
+- Missing `.env` or `OPENAI_API_KEY`
+  - Run `python main.py` once to generate a `.env` template, then add your API key.
 
 - `Configuration validation failed`
-  - Kiểm tra dải `LLM_TEMPERATURE` (0..2), `INTENT_CONFIDENCE_THRESHOLD` (0..1), và API key.
+  - Check ranges: `LLM_TEMPERATURE` (0..2), `INTENT_CONFIDENCE_THRESHOLD` (0..1), and API key.
 
-- Tool không chạy hoặc kết quả rỗng
-  - Kiểm tra tham số đầu vào (đủ trường required chưa). Với `book_flight` cần `flight_number`, `passenger_name`, `email`...
+- Tools not running or empty outputs
+  - Validate inputs and required fields. For `book_flight`, you need `flight_number`, `passenger_name`, `email`, ...
 
-- Không thấy lịch sử hội thoại
-  - Xem `data/conversations.db`. Dùng `python manage_conversation_db.py list` hoặc `view_conversations.py`.
+- No conversation history visible
+  - Inspect `data/conversations.db`. Use `python manage_conversation_db.py list` or `view_conversations.py`.
 
-- Checkpoint không được cập nhật
-  - Kiểm tra quyền ghi vào `data/langgraph_checkpoints.db` và `thread_id` khi gọi `run()`/`stream()`.
+- Checkpoints not updating
+  - Verify write permissions to `data/langgraph_checkpoints.db` and correct `thread_id` in `run()`/`stream()`.
 
-- Tiếng Việt/tiếng Anh hiển thị chưa tự nhiên
-  - Cập nhật `QuestionTemplates` hoặc prompt trong `enhanced_agent.py`.
+- Language quality (EN/VN) not ideal
+  - Update `QuestionTemplates` or prompts in `enhanced_agent.py`.
