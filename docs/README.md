@@ -1,47 +1,46 @@
-## Bộ tài liệu dự án Flight Booking Agent
+## Flight Booking Agent Docs
 
-Tài liệu này mô tả đầy đủ kiến trúc, thành phần, cách chạy và mở rộng hệ thống đặt vé máy bay sử dụng LangGraph/LangChain.
+This documentation covers the architecture, components, how to run, and how to extend the LangGraph/LangChain-based flight booking assistant.
 
-- **Mục tiêu**: Xây dựng trợ lý Tebby hỗ trợ tìm kiếm, đặt vé, theo dõi thời tiết, trạng thái chuyến bay, quản lý giỏ hàng và thanh toán mô phỏng.
-- **Công nghệ chính**: LangGraph, LangChain, Pydantic, SQLite, OpenAI Chat API.
+- Purpose: Tebby helps users search and book flights, check weather and flight status, manage cart and mock payments.
+- Core tech: LangGraph, LangChain, Pydantic, SQLite, OpenAI Chat API.
 
-### Mục lục
-- Tổng quan: xem `overview.md`
-- Cài đặt & Cấu hình: xem `setup_and_config.md`
-- Tham chiếu: xem `reference.md`
-- Hướng dẫn & Vận hành: xem `howto.md`
-- Tổng quan nhanh và cách chạy: xem phần bên dưới
+### Index
+- Overview: see `overview.md`
+- Setup & Configuration: see `setup_and_config.md`
+- Reference: see `reference.md`
+- How-To & Operations: see `howto.md`
 
-### Cấu trúc dự án
+### Project Structure
 ```text
 flight_booking/
   ├─ src/
   │  ├─ agents/             # BaseAgent, FlightAgent (enhanced)
   │  ├─ config/             # Settings + .env loader
-  │  ├─ tools/              # flight_tools (tập hợp @tool)
+  │  ├─ tools/              # flight_tools (@tool collection)
   │  └─ utils/              # models, cart_service, payment_service, database, conversation_service
-  ├─ data/                  # DB SQLite: conversations.db, langgraph_checkpoints.db
-  ├─ main.py                # Ứng dụng tương tác dạng console
-  ├─ manage_conversation_db.py / view_*.py / inspect_db.py  # CLI quản trị & kiểm tra
-  └─ README.md              # Giới thiệu (tiếng Anh)
+  ├─ data/                  # SQLite DBs: conversations.db, langgraph_checkpoints.db
+  ├─ main.py                # Console app
+  ├─ manage_conversation_db.py / view_*.py / inspect_db.py  # CLI/admin scripts
+  └─ README.md              # Project readme
 ```
 
-### Cài đặt nhanh
-1) Cài dependencies
+### Quick Start
+1) Install dependencies
 ```bash
 pip install -r requirements.txt
 ```
-2) Khởi chạy lần đầu để sinh `.env` mẫu, rồi nhập API key
+2) First run to generate `.env` template, then add your API key
 ```bash
 python main.py
-# sau đó sửa .env và thêm OPENAI_API_KEY
+# then edit .env and add OPENAI_API_KEY
 ```
-3) Chạy ứng dụng
+3) Run the app
 ```bash
 python main.py
 ```
 
-### Liên kết nhanh
-- Kiến trúc tổng thể: xem `architecture.md`
-- Tham chiếu API trong mã nguồn: xem `api_reference.md`
-- Mở rộng thêm tool/agent: xem `extending.md`
+### Quick Links
+- Architecture: see `legacy/architecture.md`
+- API reference details: see `legacy/api_reference.md`
+- Extending: see `legacy/extending.md`
